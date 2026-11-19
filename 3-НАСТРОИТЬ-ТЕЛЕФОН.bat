@@ -18,7 +18,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173 -TimeoutSec 3 ^| Out-Null; exit 0 } catch { exit 1 }"
+powershell -NoProfile -Command "$c=New-Object Net.Sockets.TcpClient; try { $c.Connect('127.0.0.1',5173); exit 0 } catch { exit 1 } finally { $c.Dispose() }"
 if errorlevel 1 (
   echo Сначала запустите 2-ЗАПУСТИТЬ.bat, затем повторите настройку.
   pause
