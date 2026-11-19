@@ -24,7 +24,7 @@ Audit basis: current `main` of `Maestro-777/Resonance` and current `main` of `Ma
 | Lyrics from adjacent .lrc / .txt files | Implemented | Timed LRC lines are highlighted in the player. |
 | Edit audio metadata and embedded artwork | Implemented | Server writes supported tags and creates a pre-edit backup. |
 | Browse and restore metadata backups | Implemented | Backups can be listed and restored from Settings. |
-| Upload music from a browser | Implemented | Upload endpoint places files in the server's upload folder and rescans. |
+| Upload multiple audio files from a browser | Implemented | Multi-select upload supports up to 40 files per batch and reports transfer progress. |\n| Import audio from a direct HTTP/HTTPS URL | Added | Server validates public hosts, redirects, supported audio formats and a 1 GB per-file limit before saving into the upload folder. |\n| Download an original library track by direct URL | Added | Authenticated `/api/download/:id` endpoint returns the original audio file as an attachment. |
 | Offline track downloads | Implemented | Per-device IndexedDB storage; offline playback uses saved blobs. |
 | Sync favorites, playlists, history, queue, EQ and playback preferences | Implemented | Private home-server JSON sync; editable lists use last-write-wins snapshots while history is merged. Not a multi-user cloud service. |
 | Export and import user data | Implemented | JSON export/import does not include audio files. |
@@ -41,7 +41,7 @@ Audit basis: current `main` of `Maestro-777/Resonance` and current `main` of `Ma
 6. **Metadata writing depends on format.** MP3 uses ID3 support; FLAC/M4A/OGG/OPUS require FFmpeg. WAV/AAC/WMA/AIFF can be read/played but are not all writable by the metadata editor.
 7. **Manual device testing remains necessary.** PWA install, background audio, Media Session, offline quota behavior, and crossfade quality depend on browser and operating system.
 
-## Changes in this audit branch
+## Changes in this audit branch\n\n- Added direct URL audio import into `Resonance Uploads`, with public-IP checks, redirect validation, supported audio MIME/extension checks and a 1 GB maximum file size.\n- Added authenticated direct-download links for original library files.\n- Expanded browser uploads to multi-file batches (up to 40 files) with visible transfer progress.
 
 - Queue supports moving any queued track up or down; the order is persisted locally and transferred as an ordered server snapshot.
 - Favorites, playlists and queue now use snapshot replacement on sync, so deliberate removals and ordering survive. History remains merged across devices.
