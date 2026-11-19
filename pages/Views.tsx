@@ -660,7 +660,7 @@ export function Settings() {
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
-  const [serverHealth, setServerHealth] = useState<{ musicRoot?: string; trackCount?: number; lastScan?: string | null } | null>(null)
+  const [serverHealth, setServerHealth] = useState<{ trackCount?: number; lastScan?: string | null } | null>(null)
 
   const loadMetadataBackups = async () => {
     if (!connected || !accessKey) return
@@ -779,7 +779,7 @@ export function Settings() {
               <span className={`rounded-full px-2.5 py-1 text-[0.68rem] ${connected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--r-panel-2)] t-dim'}`}>{connected ? 'Подключён' : 'Не подключён'}</span>
             </div>
             <p className="t-dim mt-1 text-sm">Сервер читает реальные аудиофайлы с компьютера. Ключ находится в файле <code>server/.env</code>; в Windows его можно открыть кнопкой «Где взять ключ?» ниже.</p>
-            {serverHealth?.musicRoot ? <p className="t-mute mt-2 break-all text-xs">Папка музыки: {serverHealth.musicRoot}</p> : null}
+            <p className="t-mute mt-2 text-xs">{serverHealth ? `Локальный API доступен · в индексе сервера: ${serverHealth.trackCount ?? 0} треков` : 'Локальный API не отвечает. Проверь, что запущен 2-ЗАПУСТИТЬ.bat.'}</p>
             {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} реальных треков загружено в библиотеку</p> : null}
           </div>
           {connected ? (
