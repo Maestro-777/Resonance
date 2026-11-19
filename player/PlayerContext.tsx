@@ -374,30 +374,38 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   function importData(content: string) {
     const data = JSON.parse(content) as Record<string, unknown>
-    if (data.app !== 'resonance' || data.version !== 1) throw new Error('Файл не является резервной копией Resonance версии 1.')
-    const strings = (value: unknown, limit: number) => Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 256))].slice(0, limit) : []
+    if (data.app !== 'resonance' || data.version !== 1) {
+      throw new Error('Файл не является резервной копией Resonance версии 1.')
+    }
+    const strings = (value: unknown, limit: number): string[] => {
+      if (!Array.isArray(value)) return []
+      return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 256))].slice(0, limit)
+    }
     setFavorites(strings(data.favorites, 10000))
     setHistory(strings(data.history, 500))
     setQueueIds(strings(data.queue, 5000))
     if (Array.isArray(data.playlists)) {
-      const imported = data.playlists.filter((item): item is UserPlaylist => Boolean(
-        item && typeof item === 'object' &&
-        'id' in item && typeof item.id === 'string' &&
-        'name' in item && typeof item.name === 'string' &&
-        'trackIds' in item && Array.isArray(item.trackIds)
-      )).map(item => ({
-        id: item.id,
-        name: item.name.slice(0, 120),
-        trackIds: strings(item.trackIds, 5000),
-      }))
+      const imported: UserPlaylist[] = []
+      for (const raw of data.playlists) {
+        if (!raw || typeof raw !== 'object') continue
+        const item = raw as Record<string, unknown>
+        if (typeof item.id !== 'string' || typeof item.name !== 'string' || !Array.isArray(item.trackIds)) continue
+        imported.push({
+          id: item.id,
+          name: item.name.slice(0, 120),
+          trackIds: strings(item.trackIds, 5000),
+        })
+      }
       setPlaylists(imported)
     }
     if (data.equalizer && typeof data.equalizer === 'object') {
       const source = data.equalizer as Record<string, unknown>
-      setEqualizer(Object.fromEntries(EQ_BANDS.map(key => [
-        key,
-        typeof source[key] === 'number' ? Math.max(-12, Math.min(12, source[key] as number)) : 0,
-      ])))
+      const values: Record<string, number> = {}
+      for (const key of EQ_BANDS) {
+        const value = source[key]
+        values[key] = typeof value === 'number' ? Math.max(-12, Math.min(12, value)) : 0
+      }
+      setEqualizer(values)
     }
     if (typeof data.equalizerPreset === 'string') setEqualizerPreset(data.equalizerPreset.slice(0, 40))
     if (typeof data.crossfadeSeconds === 'number') setCrossfadeSecondsState(Math.max(0, Math.min(8, data.crossfadeSeconds)))
