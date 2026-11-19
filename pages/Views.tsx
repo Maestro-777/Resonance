@@ -90,6 +90,10 @@ function MediaCard({
   )
 }
 
+function makeSlug(value: string) {
+  return value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '')
+}
+
 function durationMinutes(tracks: Track[]) {
   const seconds = tracks.reduce((total, track) => {
     const [minutes = 0, secs = 0] = track.duration.split(':').map(Number)
@@ -484,95 +488,48 @@ export function Library() {
 /* ================================================================== */
 
 export function Albums() {
+  const { tracks, connected } = usePlayer()
+  const serverAlbums = Array.from(tracks.reduce((map, track) => {
+    const key = `${track.album}__${track.albumArtist || track.artist}`
+    const current = map.get(key) || []
+    current.push(track)
+    map.set(key, current)
+    return map
+  }, new Map<string, LibraryTrack[]>()), ([key, items]) => ({ id: makeSlug(key), title: items[0].album, artist: items[0].albumArtist || items[0].artist, year: items.find(item => item.year)?.year || '', tracks: items, cover: `/api/cover/${encodeURIComponent(items[0].id)}` }))
   return (
     <div className="fade-up">
-      <PageHead title="Альбомы" subtitle="Коллекции треков из вашей библиотеки" />
-      <div className="media-grid">
-        {albums.map((album) => (
-          <MediaCard
-            key={album.id}
-            title={album.title}
-            subtitle={`${album.artist} · ${album.year}`}
-            cover={album.cover}
-            to={`/albums/${album.id}`}
-            ratio="square"
-          />
-        ))}
-      </div>
+      <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов в вашей библиотеке` : 'Коллекции треков из вашей библиотеки'} />
+      {connected ? <div className="media-grid">{serverAlbums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div> : <div className="media-grid">{albums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div>}
     </div>
   )
 }
 
 export function AlbumDetail() {
   const { id } = useParams()
-  const album: Album = albums.find((item) => item.id === id) ?? albums[0]
-  const [liked, setLiked] = useState(false)
+  const { tracks, connected, playTrack } = usePlayer()
+  const serverTracks = tracks.filter(track => makeSlug(`${track.album}__${track.albumArtist || track.artist}`) === id)
+  const demoAlbum: Album = albums.find(item => item.id === id) ?? albums[0]
+  const albumTitle = serverTracks[0]?.album || demoAlbum.title
+  const albumArtist = serverTracks[0]?.albumArtist || serverTracks[0]?.artist || demoAlbum.artist
+  const cover = serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : demoAlbum.cover
 
   return (
     <div className="fade-up">
-      <Link
-        to="/albums"
-        className="t-dim mb-5 inline-flex items-center gap-1.5 text-[0.8rem] font-medium transition-colors hover:text-[var(--r-text)]"
-      >
-        <ArrowLeft size={15} />
-        Альбом
-      </Link>
-
+      <Link to="/albums" className="t-dim mb-5 inline-flex items-center gap-1.5 text-[0.8rem] font-medium transition-colors hover:text-[var(--r-text)]"><ArrowLeft size={15} />Альбомы</Link>
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end">
         <div className="relative w-full max-w-[13rem] flex-none">
           <div className="accent-grad pulse-glow absolute -inset-5 rounded-[calc(var(--r-radius)*1.8)] opacity-25 blur-2xl" />
-          <Cover
-            src={album.cover}
-            alt={`Обложка альбома ${album.title}`}
-            className="relative aspect-square w-full"
-          />
+          <Cover src={cover} alt={`Обложка альбома ${albumTitle}`} className="relative aspect-square w-full" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="t-mute text-[0.68rem] uppercase tracking-[0.16em]">Альбом</p>
-          <h1 className="mt-1.5 text-[1.7rem] font-semibold leading-tight tracking-[-0.02em] md:text-[2.2rem]">
-            {album.title}
-          </h1>
-          <p className="t-dim mt-1 text-[0.9rem]">{album.artist}</p>
-          <p className="t-mute mt-2 text-[0.76rem]">
-            {album.year} · {album.tracks.length} треков · {durationMinutes(album.tracks)} мин
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2.5">
-            <Link
-              to="/player"
-              className="accent-btn accent-ring inline-flex h-10 items-center gap-2 rounded-full px-5 text-[0.84rem] font-semibold"
-            >
-              <Play size={15} fill="currentColor" />
-              Слушать
-            </Link>
-            <button
-              type="button"
-              onClick={() => setLiked((value) => !value)}
-              aria-pressed={liked}
-              aria-label={liked ? 'Убрать из избранного' : 'В избранное'}
-              className={`grid h-10 w-10 place-items-center rounded-full border transition-colors ${
-                liked
-                  ? 'border-transparent bg-[var(--r-panel-2)] text-[var(--r-accent)]'
-                  : 'border-[var(--r-line)] text-[var(--r-text-dim)] hover:text-[var(--r-text)]'
-              }`}
-            >
-              <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              type="button"
-              aria-label="Ещё"
-              className="grid h-10 w-10 place-items-center rounded-full border border-[var(--r-line)] text-[var(--r-text-dim)] transition-colors hover:text-[var(--r-text)]"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
+          <h1 className="mt-1.5 text-[1.7rem] font-semibold leading-tight tracking-[-0.02em] md:text-[2.2rem]">{albumTitle}</h1>
+          <p className="t-dim mt-1 text-[0.9rem]">{albumArtist}</p>
+          <p className="t-mute mt-2 text-[0.76rem]">{serverTracks.length ? `${serverTracks[0].year || 'Год неизвестен'} · ${serverTracks.length} треков` : `${demoAlbum.year} · ${demoAlbum.tracks.length} треков · ${durationMinutes(demoAlbum.tracks)} мин`}</p>
+          <button type="button" disabled={!serverTracks.length} onClick={() => void playTrack(serverTracks[0])} className="accent-btn accent-ring mt-4 inline-flex h-10 items-center gap-2 rounded-full px-5 text-[0.84rem] font-semibold disabled:opacity-40"><Play size={15} fill="currentColor" />Слушать альбом</button>
         </div>
       </div>
-
-      <TrackList
-        items={album.tracks.map((track) => ({ ...track, artist: album.artist }))}
-        showArtist={false}
-      />
+      {serverTracks.length ? <ServerTrackRows items={serverTracks} /> : connected ? <p className="t-dim">Альбом не найден в текущей библиотеке.</p> : <TrackList items={demoAlbum.tracks.map(track => ({ ...track, artist: demoAlbum.artist }))} showArtist={false} />}
     </div>
   )
 }
@@ -582,22 +539,26 @@ export function AlbumDetail() {
 /* ================================================================== */
 
 export function Artists() {
+  const { tracks, connected } = usePlayer()
+  const serverArtists = Array.from(tracks.reduce((map, track) => {
+    const name = track.albumArtist || track.artist
+    const current = map.get(name) || []
+    current.push(track)
+    map.set(name, current)
+    return map
+  }, new Map<string, LibraryTrack[]>()), ([name, items]) => ({ id: makeSlug(name), name, count: items.length, cover: `/api/cover/${encodeURIComponent(items[0].id)}` }))
+  const list = connected ? serverArtists : artists.map(item => ({ ...item, count: 0 }))
   return (
     <div className="fade-up">
-      <PageHead title="Исполнители" subtitle="Все артисты вашей коллекции" />
+      <PageHead title="Исполнители" subtitle={connected ? `${list.length} исполнителей в вашей коллекции` : 'Все артисты вашей коллекции'} />
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
-        {artists.map((artist) => (
+        {list.map(artist => (
           <Link key={artist.id} to="/albums" className="group block text-center">
             <div className="mx-auto aspect-square w-full overflow-hidden rounded-full border border-[var(--r-line)] transition-transform duration-500 group-hover:scale-[1.03]">
-              <img
-                src={artist.cover}
-                alt={artist.name}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
+              <img src={artist.cover} alt={artist.name} loading="lazy" onError={event => { event.currentTarget.src = covers.mountains }} className="h-full w-full object-cover" />
             </div>
             <p className="mt-3 truncate text-[0.88rem] font-medium">{artist.name}</p>
-            <p className="t-mute text-[0.72rem]">Исполнитель</p>
+            <p className="t-mute text-[0.72rem]">{connected ? `${artist.count} треков` : 'Исполнитель'}</p>
           </Link>
         ))}
       </div>
