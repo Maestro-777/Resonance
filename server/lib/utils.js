@@ -11,14 +11,16 @@ export function isPublicIpAddress(address) {
     if (a === 100 && b >= 64 && b <= 127) return false
     if (a === 169 && b === 254) return false
     if (a === 172 && b >= 16 && b <= 31) return false
-    if (a === 192 && (b === 0 || b === 168)) return false
+    if (a === 192 && (b === 0 || b === 168 || (b === 0 && octets[2] === 2))) return false
+    if (a === 198 && b === 51 && octets[2] === 100) return false
+    if (a === 203 && b === 0 && octets[2] === 113) return false
     if (a === 198 && (b === 18 || b === 19)) return false
     if (a === 192 && b === 88 && octets[2] === 99) return false
     return true
   }
   if (version === 6) {
     const value = address.toLowerCase()
-    if (value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('ff')) return false
+    if (value === '::1' || value === '::' || value.startsWith('2001:db8:') || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('ff')) return false
     if (value.startsWith('::ffff:')) return isPublicIpAddress(value.slice(7))
     return /^[23][0-9a-f]{3}:/i.test(value)
   }
