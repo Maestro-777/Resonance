@@ -138,8 +138,8 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
 
 function Hero() {
   const { tracks, connected, loading } = usePlayer()
-  const albumCount = new Set(tracks.map(track => `${track.album}__${track.albumArtist || track.artist}`)).size
-  const artistCount = new Set(tracks.map(track => track.albumArtist || track.artist)).size
+  const albumCount = new Set(tracks.filter(track => track.album && track.album !== 'Без альбома').map(track => `${track.album}__${track.albumArtist || track.artist}`)).size
+  const artistCount = new Set(tracks.map(track => track.albumArtist || track.artist).filter(name => name && name !== 'Неизвестный исполнитель')).size
   return (
     <section className="panel relative overflow-hidden p-6 md:p-9">
       <div className="accent-grad absolute -right-16 -top-24 h-64 w-64 rounded-full opacity-15 blur-3xl" />
@@ -264,7 +264,7 @@ export function Library() {
 
 export function Albums() {
   const { tracks, connected } = usePlayer()
-  const serverAlbums = Array.from(tracks.reduce((map, track) => {
+  const serverAlbums = Array.from(tracks.filter(track => track.album && track.album !== 'Без альбома').reduce((map, track) => {
     const key = `${track.album}__${track.albumArtist || track.artist}`
     const current = map.get(key) || []
     current.push(track)
@@ -314,7 +314,7 @@ export function AlbumDetail() {
 
 export function Artists() {
   const { tracks, connected } = usePlayer()
-  const serverArtists = Array.from(tracks.reduce((map, track) => {
+  const serverArtists = Array.from(tracks.filter(track => (track.albumArtist || track.artist) !== 'Неизвестный исполнитель').reduce((map, track) => {
     const name = track.albumArtist || track.artist
     const current = map.get(name) || []
     current.push(track)
