@@ -834,21 +834,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTime, next, previous, seek, setVolume, togglePlay, volume])
 
   useEffect(() => {
-    if (!currentTrack || !('mediaSession' in navigator)) return
-    navigator.mediaSession.metadata = new MediaMetadata({
+    if (!currentTrack || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
+    const session = navigator.mediaSession
+    session.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: currentTrack.artist,
       album: currentTrack.album,
       artwork: [{ src: `/api/cover/${encodeURIComponent(currentTrack.id)}`, sizes: '512x512', type: 'image/jpeg' }],
     })
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
-    navigator.mediaSession.setActionHandler('play', () => void togglePlay())
-    navigator.mediaSession.setActionHandler('pause', () => void togglePlay())
-    navigator.mediaSession.setActionHandler('previoustrack', () => void previous())
-    navigator.mediaSession.setActionHandler('nexttrack', () => void next())
-    navigator.mediaSession.setActionHandler('seekto', details => {
-      if (typeof details.seekTime === 'number') seek(details.seekTime)
-    })
+    session.playbackState = isPlaying ? 'playing' : 'paused'
+    try {
+      session.setActionHandler('play', () => void togglePlay())
+      session.setActionHandler('pause', () => void togglePlay())
+      session.setActionHandler('previoustrack', () => void previous())
+      session.setActionHandler('nexttrack', () => void next())
+      session.setActionHandler('seekto', details => {
+        if (typeof details.seekTime === 'number') seek(details.seekTime)
+      })
+    } catch { /* some browsers expose Media Session but support fewer actions */ }
   }, [currentTrack, isPlaying, next, previous, seek, togglePlay])
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
