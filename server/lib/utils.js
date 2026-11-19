@@ -54,6 +54,7 @@ export function mergeSyncStates(previous = {}, incoming = {}) {
     queue: mergeStrings(left.queue, right.queue, 5000),
     playback: (() => { const a = left.playback, b = right.playback; if (!a) return b; if (!b) return a; return Date.parse(b.updatedAt || '') >= Date.parse(a.updatedAt || '') ? b : a })(),
     preferences: right.preferences || left.preferences,
+    appearance: right.appearance || left.appearance,
     equalizer: right.equalizer || left.equalizer,
     updatedAt: new Date().toISOString(),
   }
@@ -83,6 +84,16 @@ export function sanitizeSyncState(value = {}) {
   for (const [key, min, max] of [['radius', 4, 28], ['fontScale', 85, 120], ['blur', 0, 30], ['crossfadeSeconds', 0, 8]]) {
     const value = Number(sourcePrefs[key])
     if (Number.isFinite(value)) preferences[key] = Math.min(max, Math.max(min, value))
+  }
+  const sourceAppearance = input.appearance && typeof input.appearance === 'object' && !Array.isArray(input.appearance) ? input.appearance : {}
+  const appearance = {}
+  if (['night', 'amethyst', 'graphite', 'oled'].includes(sourceAppearance.theme)) appearance.theme = sourceAppearance.theme
+  if (typeof sourceAppearance.accent === 'string' && /^#[0-9a-f]{6}$/i.test(sourceAppearance.accent)) appearance.accent = sourceAppearance.accent.toLowerCase()
+  if (['comfortable', 'compact'].includes(sourceAppearance.density)) appearance.density = sourceAppearance.density
+  for (const key of ['glow', 'animations', 'labels']) if (typeof sourceAppearance[key] === 'boolean') appearance[key] = sourceAppearance[key]
+  for (const [key, min, max] of [['radius', 4, 28], ['blur', 0, 30], ['scale', 0.85, 1.2], ['cols', 2, 8]]) {
+    const value = Number(sourceAppearance[key])
+    if (Number.isFinite(value)) appearance[key] = Math.min(max, Math.max(min, value))
   }
   const sourceEq = input.equalizer && typeof input.equalizer === 'object' && !Array.isArray(input.equalizer) ? input.equalizer : {}
   const sourceBands = sourceEq.eq && typeof sourceEq.eq === 'object' ? sourceEq.eq : {}
