@@ -4,11 +4,15 @@ import cors from 'cors'
 import multer from 'multer'
 import path from 'node:path'
 import os from 'node:os'
+import dns from 'node:dns/promises'
+import net from 'node:net'
+import { createWriteStream, createReadStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import { Transform, Readable } from 'node:stream'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 import NodeID3 from 'node-id3'
 import { parseByteRange, resolveSafePath, sanitizeSyncState, mergeSyncStates, parseReplayGainDb, resolveServerHost, sanitizeUploadFilename } from './lib/utils.js'
@@ -332,10 +336,110 @@ app.post('/api/uploads', upload.array('files', 40), async (req, res) => {
     res.status(201).json({ ok: true, uploaded: files.length, files: files.map(file => file.filename), trackCount: library.length, folder: path.relative(MUSIC_ROOT, UPLOAD_DIR) })
   } catch (error) { res.status(500).json({ error: 'Файлы загружены, но библиотеку не удалось обновить: ' + error.message }) }
 })
+
+const MAX_REMOTE_FILE_BYTES = 1024 * 1024 * 1024
+const MIME_EXTENSIONS = new Map([
+  ['audio/mpeg', '.mp3'], ['audio/flac', '.flac'], ['audio/mp4', '.m4a'],
+  ['audio/aac', '.aac'], ['audio/ogg', '.ogg'], ['audio/opus', '.opus'],
+  ['audio/wav', '.wav'], ['audio/x-wav', '.wav'], ['audio/vnd.wave', '.wav'],
+  ['audio/x-ms-wma', '.wma'], ['audio/aiff', '.aiff'], ['audio/x-aiff', '.aiff'],
+  ['application/ogg', '.ogg'],
+])
+function assertPublicRemoteHost(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, '')
+  if (net.isIP(host)) {
+    if (!isPublicIpAddress(host)) throw new Error('Ссылка ведёт на локальный или закрытый IP-адрес.')
+    return
+  }
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('Локальные адреса для загрузки запрещены.')
+}
+async function resolvePublicRemoteHost(hostname) {
+  assertPublicRemoteHost(hostname)
+  if (net.isIP(hostname.replace(/^\[|\]$/g, ''))) return
+  const addresses = await dns.lookup(hostname, { all: true, verbatim: true })
+  if (!addresses.length || addresses.some(item => !isPublicIpAddress(item.address))) throw new Error('Домен разрешается в локальный или закрытый IP-адрес.')
+}
+async function fetchRemoteAudio(inputUrl) {
+  let current
+  try { current = new URL(inputUrl) } catch { throw new Error('Введи корректную прямую ссылку на аудиофайл.') }
+  if (!['http:', 'https:'].includes(current.protocol) || current.username || current.password || ![80, 443, ''].includes(current.port ? Number(current.port) : '')) throw new Error('Разрешены только публичные HTTP/HTTPS-ссылки без логина и пароля.')
+  let response
+  for (let redirects = 0; redirects <= 4; redirects += 1) {
+    await resolvePublicRemoteHost(current.hostname)
+    response = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(10 * 60 * 1000), headers: { 'user-agent': 'Resonance-Music-Importer/1.0' } })
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location')
+      if (!location || redirects === 4) throw new Error('Слишком много перенаправлений или отсутствует адрес перенаправления.')
+      current = new URL(location, current)
+      if (!['http:', 'https:'].includes(current.protocol) || current.username || current.password || (current.port && ![80, 443].includes(Number(current.port)))) throw new Error('Перенаправление на небезопасный адрес запрещено.')
+      continue
+    }
+    if (!response.ok) throw new Error('Сайт вернул HTTP ' + response.status + '.')
+    const length = Number(response.headers.get('content-length') || 0)
+    if (length > MAX_REMOTE_FILE_BYTES) throw new Error('Файл больше 1 ГБ.')
+    const urlName = decodeURIComponent(path.basename(current.pathname))
+    let extension = path.extname(urlName).toLowerCase()
+    if (!AUDIO_EXTENSIONS.has(extension)) extension = MIME_EXTENSIONS.get((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()) || ''
+    if (!AUDIO_EXTENSIONS.has(extension)) throw new Error('По ссылке не найден поддерживаемый аудиофайл. Нужен прямой URL на MP3, FLAC, M4A, AAC, OGG, OPUS, WAV, WMA или AIFF.')
+    return { response, originalName: urlName && path.extname(urlName) ? urlName : 'download' + extension, extension }
+  }
+  throw new Error('Не удалось получить файл по ссылке.')
+}
+app.post('/api/import-url', async (req, res) => {
+  if (typeof req.body?.url !== 'string' || req.body.url.length > 4096) return res.status(400).json({ error: 'Укажи прямую ссылку на аудиофайл.' })
+  let tempPath = ''
+  let savedPath = ''
+  try {
+    const { response, originalName } = await fetchRemoteAudio(req.body.url.trim())
+    await fs.mkdir(UPLOAD_DIR, { recursive: true })
+    const filename = await uniqueUploadName(UPLOAD_DIR, originalName)
+    const finalPath = path.join(UPLOAD_DIR, filename)
+    tempPath = finalPath + '.download-' + crypto.randomBytes(6).toString('hex')
+    let received = 0
+    const counter = new Transform({ transform(chunk, _encoding, callback) {
+      received += chunk.length
+      if (received > MAX_REMOTE_FILE_BYTES) return callback(new Error('Файл больше 1 ГБ.'))
+      callback(null, chunk)
+    } })
+    if (!response.body) throw new Error('Сайт не передал содержимое файла.')
+    await pipeline(Readable.fromWeb(response.body), counter, createWriteStream(tempPath, { flags: 'wx' }))
+    if (!received) throw new Error('Скачанный файл пуст.')
+    await fs.rename(tempPath, finalPath)
+    tempPath = ''
+    savedPath = finalPath
+    const library = await scanLibrary()
+    const track = library.find(item => item.relativePath === path.relative(MUSIC_ROOT, finalPath))
+    if (!track) throw new Error('Файл скачан, но не удалось прочитать его аудиометаданные.')
+    savedPath = ''
+    res.status(201).json({ ok: true, track, trackCount: library.length, filename })
+  } catch (error) {
+    if (tempPath) await fs.rm(tempPath, { force: true }).catch(() => {})
+    if (savedPath) await fs.rm(savedPath, { force: true }).catch(() => {})
+    res.status(400).json({ error: error.message || 'Не удалось скачать аудиофайл по ссылке.' })
+  }
+})
 app.post('/api/library/scan', async (_req, res) => {
   try { const result = await scanLibrary(); res.json({ ok: true, count: result.length, lastScan }) }
   catch (error) { res.status(500).json({ ok: false, error: error.message, root: MUSIC_ROOT }) }
 })
+app.get('/api/download/:id', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.status(404).json({ error: 'Трек не найден.' })
+  let absolutePath
+  try { absolutePath = resolveSafePath(MUSIC_ROOT, track.relativePath) } catch { return res.sendStatus(400) }
+  try {
+    const stat = await fs.stat(absolutePath)
+    const ext = path.extname(absolutePath).toLowerCase()
+    const mime = ({ '.mp3':'audio/mpeg', '.flac':'audio/flac', '.m4a':'audio/mp4', '.aac':'audio/aac', '.ogg':'audio/ogg', '.opus':'audio/ogg', '.wav':'audio/wav', '.wma':'audio/x-ms-wma', '.aiff':'audio/aiff' })[ext] || 'application/octet-stream'
+    const filename = path.basename(absolutePath).replace(/[\\r\\n"]/g, '_')
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Content-Length', stat.size)
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(filename))
+    res.setHeader('Cache-Control', 'private, no-store')
+    createReadStream(absolutePath).pipe(res)
+  } catch { if (!res.headersSent) res.sendStatus(404); else res.destroy() }
+})
+
 app.get('/api/stream/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.status(404).json({ error: 'Track not found. Scan the library first.' })
