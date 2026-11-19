@@ -29,7 +29,7 @@ export type LibraryTrack = {
 type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
-type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; equalizer?: { eq?: Record<string, number>; eqPreset?: string } }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number } }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -71,6 +71,8 @@ type PlayerContextValue = {
   clearQueue: () => void
   sleepTimer: number | null
   setSleepTimer: (minutes: number | null) => void
+  crossfadeSeconds: number
+  setCrossfadeSeconds: (seconds: number) => void
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -80,6 +82,7 @@ const HISTORY_KEY = 'resonance.history.v1'
 const PLAYLISTS_KEY = 'resonance.playlists.v1'
 const EQ_KEY = 'resonance.equalizer.v1'
 const PLAYBACK_KEY = 'resonance.playback.v1'
+const CROSSFADE_KEY = 'resonance.crossfade.v1'
 const EQ_BANDS = ['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000']
 const ACCESS_KEY = 'resonance.accessKey'
 
@@ -119,8 +122,15 @@ async function request<T>(path: string, init: RequestInit = {}, key = ''): Promi
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const secondaryAudioRef = useRef<HTMLAudioElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const secondarySourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const deckGainRef = useRef<GainNode | null>(null)
+  const secondaryDeckGainRef = useRef<GainNode | null>(null)
+  const transitionTimerRef = useRef<number | null>(null)
+  const crossfadeActiveRef = useRef(false)
+  const preloadedTrackIdRef = useRef('')
   const filterNodesRef = useRef<BiquadFilterNode[]>([])
   const objectUrlRef = useRef<string | null>(null)
   const restoredPlaybackRef = useRef(false)
@@ -133,6 +143,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [shuffle, setShuffle] = useState(false)
   const [repeat, setRepeat] = useState<RepeatMode>('off')
   const [sleepTimer, setSleepTimerState] = useState<number | null>(null)
+  const [crossfadeSeconds, setCrossfadeSecondsState] = useState(() => Math.max(0, Math.min(8, Number(localStorage.getItem(CROSSFADE_KEY) ?? 4) || 0)) )
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
   const [queueIds, setQueueIds] = useState<string[]>(() => readIds(QUEUE_KEY))
   const [history, setHistory] = useState<string[]>(() => readIds(HISTORY_KEY))
@@ -223,6 +234,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [equalizer])
 
   useEffect(() => {
+    localStorage.setItem(CROSSFADE_KEY, String(crossfadeSeconds))
+  }, [crossfadeSeconds])
+
+  useEffect(() => {
     if (currentTrack) localStorage.setItem(PLAYBACK_KEY, JSON.stringify({ trackId: currentTrack.id, position: currentTime }))
   }, [currentTrack, currentTime])
 
@@ -253,6 +268,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setSleepTimerState(minutes && minutes > 0 ? Date.now() + minutes * 60_000 : null)
   }, [])
 
+  const setCrossfadeSeconds = useCallback((seconds: number) => {
+    setCrossfadeSecondsState(Math.max(0, Math.min(8, seconds)))
+  }, [])
+
   useEffect(() => {
     if (!sleepTimer) return
     const timer = window.setTimeout(() => {
@@ -279,6 +298,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
       if (remote.equalizer?.eq) setEqualizer(current => ({ ...current, ...remote.equalizer!.eq }))
       if (remote.equalizer?.eqPreset) setEqualizerPreset(remote.equalizer.eqPreset)
+      if (typeof remote.preferences?.crossfadeSeconds === 'number') setCrossfadeSecondsState(Math.max(0, Math.min(8, remote.preferences.crossfadeSeconds)))
       if (remote.playlists) setPlaylists(current => {
         const merged = new Map(current.map(item => [item.id, item]))
         for (const item of remote.playlists || []) {
@@ -300,11 +320,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => {
       void request('/api/sync', {
         method: 'PUT',
-        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists, equalizer: { eq: equalizer, eqPreset: equalizerPreset } }),
+        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists, equalizer: { eq: equalizer, eqPreset: equalizerPreset }, preferences: { crossfadeSeconds } }),
       }, accessKey).catch(() => setError('Синхронизация временно недоступна. Изменения сохранены на этом устройстве.'))
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset])
+  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
 
   const createPlaylist = useCallback((name: string) => {
     const clean = name.trim().slice(0, 120)
@@ -319,12 +339,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const activateAudioGraph = useCallback(async () => {
-    const audio = audioRef.current
-    if (!audio) return
+    const primary = audioRef.current
+    const secondary = secondaryAudioRef.current
+    if (!primary || !secondary) return
     if (!audioContextRef.current) {
-      const AudioContextClass = window.AudioContext
-      const context = new AudioContextClass()
-      const source = context.createMediaElementSource(audio)
+      const context = new window.AudioContext()
+      const source = context.createMediaElementSource(primary)
+      const secondarySource = context.createMediaElementSource(secondary)
+      const gainA = context.createGain()
+      const gainB = context.createGain()
+      gainA.gain.value = 1
+      gainB.gain.value = 0
+      source.connect(gainA)
+      secondarySource.connect(gainB)
       const filters = EQ_BANDS.map((frequency, index) => {
         const filter = context.createBiquadFilter()
         filter.type = index === 0 ? 'lowshelf' : index === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking'
@@ -333,10 +360,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         filter.gain.value = equalizer[frequency] || 0
         return filter
       })
-      source.connect(filters[0])
+      gainA.connect(filters[0])
+      gainB.connect(filters[0])
       filters.forEach((filter, index) => filter.connect(filters[index + 1] || context.destination))
       audioContextRef.current = context
       sourceNodeRef.current = source
+      secondarySourceNodeRef.current = secondarySource
+      deckGainRef.current = gainA
+      secondaryDeckGainRef.current = gainB
       filterNodesRef.current = filters
     }
     if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume()
@@ -378,6 +409,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playTrack = useCallback(async (track: LibraryTrack) => {
     const audio = audioRef.current
     if (!audio) return
+    if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current)
+    transitionTimerRef.current = null
+    crossfadeActiveRef.current = false
+    const standby = secondaryAudioRef.current
+    standby?.pause()
+    if (deckGainRef.current && audioContextRef.current) deckGainRef.current.gain.setValueAtTime(1, audioContextRef.current.currentTime)
+    if (secondaryDeckGainRef.current && audioContextRef.current) secondaryDeckGainRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime)
     setCurrentTrack(track)
     setHistory(items => [track.id, ...items.filter(id => id !== track.id)].slice(0, 500))
     await activateAudioGraph()
@@ -400,6 +438,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playOfflineTrack = useCallback(async (track: LibraryTrack, blob: Blob) => {
     const audio = audioRef.current
     if (!audio) return
+    secondaryAudioRef.current?.pause()
+    if (deckGainRef.current && audioContextRef.current) deckGainRef.current.gain.setValueAtTime(1, audioContextRef.current.currentTime)
+    if (secondaryDeckGainRef.current && audioContextRef.current) secondaryDeckGainRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime)
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     const url = URL.createObjectURL(blob)
     objectUrlRef.current = url
@@ -431,15 +472,95 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       try {
         await activateAudioGraph()
         await audio.play()
+        if (crossfadeActiveRef.current) await secondaryAudioRef.current?.play()
         setIsPlaying(true)
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Не удалось продолжить воспроизведение')
       }
     } else {
       audio.pause()
+      if (crossfadeActiveRef.current) secondaryAudioRef.current?.pause()
       setIsPlaying(false)
     }
   }, [activateAudioGraph, currentTrack, playTrack, tracks])
+
+  const transitionTrack = useCallback(() => {
+    if (queueIds.length) return tracks.find(track => track.id === queueIds[0]) || null
+    if (!currentTrack || repeat === 'one') return null
+    if (shuffle && tracks.length > 1) {
+      const choices = tracks.filter(track => track.id !== currentTrack.id)
+      return choices[Math.floor(Math.random() * choices.length)] || null
+    }
+    const index = tracks.findIndex(track => track.id === currentTrack.id)
+    if (index >= 0 && index < tracks.length - 1) return tracks[index + 1]
+    if (repeat === 'all' && tracks.length) return tracks[0]
+    return null
+  }, [currentTrack, queueIds, repeat, shuffle, tracks])
+
+  const beginCrossfade = useCallback(async (nextTrack: LibraryTrack) => {
+    const active = audioRef.current
+    const standby = secondaryAudioRef.current
+    const context = audioContextRef.current
+    const from = deckGainRef.current
+    const to = secondaryDeckGainRef.current
+    if (!active || !standby || !context || !from || !to || crossfadeActiveRef.current || crossfadeSeconds <= 0) return
+    crossfadeActiveRef.current = true
+    if (queueIds[0] === nextTrack.id) setQueueIds(items => items.slice(1))
+    try {
+      standby.pause()
+      standby.src = `/api/stream/${encodeURIComponent(nextTrack.id)}`
+      standby.volume = Math.min(1, volume * Math.pow(10, (nextTrack.replayGainDb || 0) / 20))
+      standby.load()
+      if (standby.readyState < 2) await new Promise<void>((resolve, reject) => {
+        const done = () => { cleanup(); resolve() }
+        const fail = () => { cleanup(); reject(new Error('Не удалось подготовить следующий трек')) }
+        const cleanup = () => { standby.removeEventListener('canplay', done); standby.removeEventListener('error', fail) }
+        standby.addEventListener('canplay', done, { once: true })
+        standby.addEventListener('error', fail, { once: true })
+      })
+      await standby.play()
+      const start = context.currentTime
+      from.gain.cancelScheduledValues(start)
+      from.gain.setValueAtTime(from.gain.value, start)
+      from.gain.linearRampToValueAtTime(0, start + crossfadeSeconds)
+      to.gain.cancelScheduledValues(start)
+      to.gain.setValueAtTime(0, start)
+      to.gain.linearRampToValueAtTime(1, start + crossfadeSeconds)
+      transitionTimerRef.current = window.setTimeout(() => {
+        const previousDeck = audioRef.current
+        if (!previousDeck) return
+        audioRef.current = standby
+        secondaryAudioRef.current = previousDeck
+        deckGainRef.current = to
+        secondaryDeckGainRef.current = from
+        previousDeck.pause()
+        crossfadeActiveRef.current = false
+        transitionTimerRef.current = null
+        setCurrentTrack(nextTrack)
+        setCurrentTime(0)
+        setDuration(nextTrack.duration || 0)
+        setHistory(items => [nextTrack.id, ...items.filter(id => id !== nextTrack.id)].slice(0, 500))
+        setIsPlaying(true)
+      }, crossfadeSeconds * 1000)
+    } catch {
+      crossfadeActiveRef.current = false
+      to.gain.cancelScheduledValues(context.currentTime)
+      to.gain.setValueAtTime(0, context.currentTime)
+      from.gain.setValueAtTime(1, context.currentTime)
+      await playTrack(nextTrack)
+    }
+  }, [crossfadeSeconds, playTrack, queueIds, volume])
+
+  const preloadGaplessNext = useCallback(() => {
+    if (crossfadeSeconds !== 0 || crossfadeActiveRef.current) return
+    const nextTrack = transitionTrack()
+    const standby = secondaryAudioRef.current
+    if (!nextTrack || !standby || preloadedTrackIdRef.current === nextTrack.id) return
+    standby.pause()
+    standby.src = `/api/stream/${encodeURIComponent(nextTrack.id)}`
+    standby.load()
+    preloadedTrackIdRef.current = nextTrack.id
+  }, [crossfadeSeconds, transitionTrack])
 
   const next = useCallback(async () => {
     if (queueIds.length) {
@@ -493,6 +614,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const nextValue = Math.max(0, Math.min(1, value))
     setVolumeState(nextValue)
     if (audioRef.current) audioRef.current.volume = nextValue
+    if (secondaryAudioRef.current) secondaryAudioRef.current.volume = nextValue
   }, [])
 
   const toggleFavorite = useCallback((id: string) => {
@@ -506,39 +628,90 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => setQueueIds([]), [])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    const onTime = () => setCurrentTime(audio.currentTime || 0)
-    const onDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
-    const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
-    const onEnded = () => {
+    const primary = audioRef.current
+    const secondary = secondaryAudioRef.current
+    if (!primary || !secondary) return
+    const decks = [primary, secondary]
+    const onTime = (event: Event) => {
+      const audio = event.currentTarget as HTMLAudioElement
+      if (audio !== audioRef.current) return
+      setCurrentTime(audio.currentTime || 0)
+      if (Number.isFinite(audio.duration)) setDuration(audio.duration)
+      if (audio.duration > 0) {
+        const remaining = audio.duration - audio.currentTime
+        if (crossfadeSeconds === 0 && remaining <= 12) preloadGaplessNext()
+        else if (crossfadeSeconds > 0 && remaining <= crossfadeSeconds + 0.5 && !crossfadeActiveRef.current) {
+          const nextTrack = transitionTrack()
+          if (nextTrack) void beginCrossfade(nextTrack)
+        }
+      }
+    }
+    const onPlay = (event: Event) => { if (event.currentTarget === audioRef.current) setIsPlaying(true) }
+    const onPause = (event: Event) => { if (event.currentTarget === audioRef.current) setIsPlaying(false) }
+    const onEnded = (event: Event) => {
+      const audio = event.currentTarget as HTMLAudioElement
+      if (audio !== audioRef.current || crossfadeActiveRef.current) return
       if (repeat === 'one') {
         audio.currentTime = 0
         void audio.play()
+        return
+      }
+      const nextTrack = transitionTrack()
+      const standby = secondaryAudioRef.current
+      const from = deckGainRef.current
+      const to = secondaryDeckGainRef.current
+      const context = audioContextRef.current
+      if (crossfadeSeconds === 0 && nextTrack && standby && standby.readyState >= 2 && from && to && context) {
+        const now = context.currentTime
+        to.gain.cancelScheduledValues(now)
+        to.gain.setValueAtTime(1, now)
+        from.gain.cancelScheduledValues(now)
+        from.gain.setValueAtTime(0, now)
+        if (queueIds[0] === nextTrack.id) setQueueIds(items => items.slice(1))
+        void standby.play().then(() => {
+          audioRef.current = standby
+          secondaryAudioRef.current = audio
+          deckGainRef.current = to
+          secondaryDeckGainRef.current = from
+          audio.pause()
+          preloadedTrackIdRef.current = ''
+          setCurrentTrack(nextTrack)
+          setCurrentTime(0)
+          setDuration(nextTrack.duration || 0)
+          setHistory(items => [nextTrack.id, ...items.filter(id => id !== nextTrack.id)].slice(0, 500))
+          setIsPlaying(true)
+        }).catch(() => void next())
       } else {
         void next()
       }
     }
-    const onError = () => {
+    const onError = (event: Event) => {
+      const audio = event.currentTarget as HTMLAudioElement
+      if (audio !== audioRef.current) return
       if (audio.error) setError('Не удалось воспроизвести файл. Проверьте формат и подключение к серверу.')
       setIsPlaying(false)
     }
-    audio.addEventListener('timeupdate', onTime)
-    audio.addEventListener('durationchange', onDuration)
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('pause', onPause)
-    audio.addEventListener('ended', onEnded)
-    audio.addEventListener('error', onError)
-    return () => {
-      audio.removeEventListener('timeupdate', onTime)
-      audio.removeEventListener('durationchange', onDuration)
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('pause', onPause)
-      audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener('error', onError)
+    for (const deck of decks) {
+      deck.addEventListener('timeupdate', onTime)
+      deck.addEventListener('durationchange', onTime)
+      deck.addEventListener('play', onPlay)
+      deck.addEventListener('pause', onPause)
+      deck.addEventListener('ended', onEnded)
+      deck.addEventListener('error', onError)
     }
-  }, [next, repeat])
+    return () => {
+      for (const deck of decks) {
+        deck.removeEventListener('timeupdate', onTime)
+        deck.removeEventListener('durationchange', onTime)
+        deck.removeEventListener('play', onPlay)
+        deck.removeEventListener('pause', onPause)
+        deck.removeEventListener('ended', onEnded)
+        deck.removeEventListener('error', onError)
+      }
+    }
+  }, [beginCrossfade, crossfadeSeconds, next, preloadGaplessNext, queueIds, repeat, transitionTrack])
+
+
 
   useEffect(() => {
     if (!currentTrack || !('mediaSession' in navigator)) return
@@ -561,15 +734,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerContextValue>(() => ({
     tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist,
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
-    next, previous, seek, setVolume, playOfflineTrack, toggleShuffle: () => setShuffle(value => !value),
+    next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
-    toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
+    toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds,
   }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer])
 
   return (
     <PlayerContext.Provider value={value}>
       {children}
       <audio ref={audioRef} preload="metadata" />
+      <audio ref={secondaryAudioRef} preload="metadata" />
     </PlayerContext.Provider>
   )
 }
