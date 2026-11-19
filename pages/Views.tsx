@@ -661,6 +661,7 @@ export function TrackMetadataEditor() {
   const { tracks, connected, accessKey, refreshLibrary } = usePlayer()
   const track = tracks.find(item => item.id === id)
   const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
+  const [coverData, setCoverData] = useState('')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const supported = track ? ['MP3','FLAC','M4A','OGG','OPUS'].includes(track.format) : false
