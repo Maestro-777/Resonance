@@ -97,14 +97,6 @@ function makeSlug(value: string) {
   return value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '')
 }
 
-function durationMinutes(tracks: Track[]) {
-  const seconds = tracks.reduce((total, track) => {
-    const [minutes = 0, secs = 0] = track.duration.split(':').map(Number)
-    return total + minutes * 60 + secs
-  }, 0)
-  return Math.round(seconds / 60)
-}
-
 function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
   const { currentTrack, isPlaying, playTrack, togglePlay, toggleFavorite, favorites, addToQueue } = usePlayer()
   if (!items.length) return <p className="t-dim rounded-xl border border-dashed border-[var(--r-line)] p-5 text-sm">В музыкальной папке пока не найдено аудиофайлов. Проверьте путь MUSIC_ROOT и запустите сканирование в настройках.</p>
