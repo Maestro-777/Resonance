@@ -25,7 +25,6 @@ import {
   X,
 } from 'lucide-react'
 import {
-  covers,
 } from '@/data'
 import { AppearanceControls, useAppearance } from '@/theme'
 import { Cover, SectionHeader } from '@/components/Shell'
@@ -618,7 +617,7 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, disconnect, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds, exportData, importData } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, disconnect, loading, tracks, currentTrack, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds, exportData, importData } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -915,13 +914,13 @@ export function Settings() {
             <div className="glass rounded-[calc(var(--r-radius)*0.9)] p-3">
               <div className="flex items-center gap-3">
                 <img
-                  src={covers.ocean}
-                  alt="Обложка трека в предпросмотре"
+                  src={currentTrack ? `/api/cover/${encodeURIComponent(currentTrack.id)}` : '/cover-fallback.svg'}
+                  alt={currentTrack ? `Обложка ${currentTrack.title}` : "Нет выбранного трека"}
                   className="h-12 w-12 rounded-[calc(var(--r-radius)*0.5)] object-cover"
                 />
                 <div className="min-w-0">
-                  <p className="truncate text-[0.84rem] font-medium">Ocean Breath</p>
-                  <p className="t-mute truncate text-[0.7rem]">Deep Sound</p>
+                  <p className="truncate text-[0.84rem] font-medium">{currentTrack?.title || 'Название трека'}</p>
+                  <p className="t-mute truncate text-[0.7rem]">{currentTrack?.artist || 'Исполнитель'}</p>
                 </div>
               </div>
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/12">
