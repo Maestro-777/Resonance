@@ -77,6 +77,7 @@ type PlayerContextValue = {
   setCrossfadeSeconds: (seconds: number) => void
   exportData: () => string
   importData: (content: string) => void
+  getSpectrum: () => number[]
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -139,6 +140,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const crossfadeActiveRef = useRef(false)
   const preloadedTrackIdRef = useRef('')
   const filterNodesRef = useRef<BiquadFilterNode[]>([])
+  const analyserRef = useRef<AnalyserNode | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const restoredPlaybackRef = useRef(false)
   const [tracks, setTracks] = useState<LibraryTrack[]>([])
@@ -452,6 +454,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       gainA.connect(filters[0])
       gainB.connect(filters[0])
       filters.forEach((filter, index) => filter.connect(filters[index + 1] || context.destination))
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 128
+      analyser.smoothingTimeConstant = 0.82
+      filters[filters.length - 1].disconnect()
+      filters[filters.length - 1].connect(analyser)
+      analyser.connect(context.destination)
+      analyserRef.current = analyser
       audioContextRef.current = context
       sourceNodeRef.current = source
       secondarySourceNodeRef.current = secondarySource
@@ -467,6 +476,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       filter.gain.setTargetAtTime(equalizer[EQ_BANDS[index]] || 0, filter.context.currentTime, 0.015)
     })
   }, [equalizer])
+
+  const getSpectrum = useCallback(() => {
+    const analyser = analyserRef.current
+    if (!analyser) return []
+    const values = new Uint8Array(analyser.frequencyBinCount)
+    analyser.getByteFrequencyData(values)
+    return Array.from(values.slice(0, 40), value => Math.max(5, (value / 255) * 100))
+  }, [])
 
   const setEqBand = useCallback((frequency: string, gain: number) => {
     setEqualizer(current => ({ ...current, [frequency]: Math.max(-12, Math.min(12, gain)) }))
@@ -862,8 +879,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
-    toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
+    toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum,
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
 
   return (
     <PlayerContext.Provider value={value}>
