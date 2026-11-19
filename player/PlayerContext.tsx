@@ -807,7 +807,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
 
   return (
     <PlayerContext.Provider value={value}>
