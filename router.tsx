@@ -15,6 +15,7 @@ import {
   Player,
   Playlists,
   Settings,
+  TrackMetadataEditor,
 } from './pages/Views'
 
 export const router = createBrowserRouter([
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'library', element: <Library /> },
+      { path: 'tracks/:id/edit', element: <TrackMetadataEditor /> },
       { path: 'albums', element: <Albums /> },
       { path: 'albums/:id', element: <AlbumDetail /> },
       { path: 'artists', element: <Artists /> },

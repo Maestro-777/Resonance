@@ -12,6 +12,11 @@ import {
   ListFilter,
   ListMusic,
   MoreHorizontal,
+  Pencil,
+  Trash2,
+  ImagePlus,
+  Save,
+  RotateCcw,
   Pause,
   Play,
   Plus,
@@ -82,6 +87,18 @@ function MediaCard({
   )
 }
 
+
+const ALBUM_COVERS_KEY = 'resonance.albumCovers.v1'
+function readAlbumCovers(): Record<string,string> {
+  try { const value = JSON.parse(localStorage.getItem(ALBUM_COVERS_KEY) || '{}'); return value && typeof value === 'object' ? value : {} } catch { return {} }
+}
+function AlbumCard({ album, cover, onCover }: { album: {id:string;title:string;artist:string;year:string|number;cover:string}, cover:string, onCover:(id:string,data:string)=>void }) {
+  return <div className="group relative min-w-0">
+    <MediaCard title={album.title} subtitle={`${album.artist} · ${album.year || 'год неизвестен'}`} cover={cover || album.cover} to={`/albums/${album.id}`} ratio="square"/>
+    <label title="Изменить обложку альбома" className="absolute right-2 top-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-white/20 bg-black/65 text-white opacity-100 backdrop-blur transition sm:opacity-0 sm:group-hover:opacity-100"><ImagePlus size={16}/><input type="file" accept="image/*" className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){window.alert('Изображение должно быть меньше 5 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>{if(typeof reader.result==='string')onCover(album.id,reader.result)};reader.readAsDataURL(file);event.target.value=''}}/></label>
+  </div>
+}
+
 type MetadataBackup = { id: string; filename: string; trackId: string; createdAt: string; size: number }
 
 function parseLrc(content: string) {
@@ -105,7 +122,7 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
         const active = currentTrack?.id === track.id
         const liked = favorites.includes(track.id)
         return (
-          <div key={track.id} className={`group grid grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}>
+          <div key={track.id} className={`group grid grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto] items-center sm:grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto_auto_auto] gap-3 rounded-xl px-2 py-2 transition-colors ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}>
             <span className="t-mute text-center text-xs tabular-nums">{active && isPlaying ? <AudioLines size={15} className="mx-auto accent-text" /> : index + 1}</span>
             <img src={`/api/cover/${encodeURIComponent(track.id)}`} onError={event => { event.currentTarget.style.visibility = 'hidden' }} alt="" className="h-10 w-10 rounded-lg bg-[var(--r-panel-2)] object-cover" />
             <button type="button" onClick={() => active ? void togglePlay() : void playTrack(track)} className="min-w-0 text-left">
@@ -114,7 +131,8 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
             </button>
             <span className="t-mute hidden text-xs tabular-nums sm:block">{formatTime(track.duration)}</span>
             <button type="button" onClick={() => toggleFavorite(track.id)} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} aria-pressed={liked} className={`grid h-8 w-8 place-items-center rounded-full hover:bg-[var(--r-panel-2)] ${liked ? 'text-[var(--r-accent)]' : 't-mute'}`}><Heart size={15} fill={liked ? 'currentColor' : 'none'} /></button>
-            <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)]"><Plus size={16} /></button>
+            <Link to={`/tracks/${encodeURIComponent(track.id)}/edit`} aria-label={`Редактировать ${track.title}`} title="Редактировать трек" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] hover:accent-text"><Pencil size={15} /></Link>
+            <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="hidden h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] sm:grid"><Plus size={16} /></button>
           </div>
         )
       })}
@@ -232,6 +250,8 @@ export function Library() {
 
 export function Albums() {
   const { tracks, connected } = usePlayer()
+  const [covers, setCovers] = useState<Record<string,string>>(() => readAlbumCovers())
+  const saveCover = (id:string,data:string) => { const next={...covers,[id]:data};setCovers(next);localStorage.setItem(ALBUM_COVERS_KEY,JSON.stringify(next)) }
   const serverAlbums = Array.from(tracks.filter(track => track.album && track.album !== 'Без альбома').reduce((map, track) => {
     const key = `${track.album}__${track.albumArtist || track.artist}`
     const current = map.get(key) || []
@@ -239,21 +259,20 @@ export function Albums() {
     map.set(key, current)
     return map
   }, new Map<string, LibraryTrack[]>()), ([key, items]) => ({ id: makeSlug(key), title: items[0].album, artist: items[0].albumArtist || items[0].artist, year: items.find(item => item.year)?.year || '', tracks: items, cover: `/api/cover/${encodeURIComponent(items[0].id)}` }))
-  return (
-    <div className="fade-up">
-      <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов в вашей библиотеке` : 'Коллекции треков из вашей библиотеки'} />
-      {connected ? (serverAlbums.length ? <div className="media-grid">{serverAlbums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year || 'год неизвестен'}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div> : <p className="t-dim text-sm">В просканированной папке пока не найдено альбомов.</p>) : <p className="t-dim text-sm">Подключи сервер, чтобы увидеть реальные альбомы. Демонстрационные записи скрыты.</p>}
-    </div>
-  )
+  return <div className="fade-up">
+    <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов · нажми на значок изображения, чтобы назначить обложку` : 'Альбомы твоей музыкальной библиотеки'}/>
+    {connected ? (serverAlbums.length ? <div className="media-grid">{serverAlbums.map(album=><AlbumCard key={album.id} album={album} cover={covers[album.id] || album.cover} onCover={saveCover}/>)}</div> : <p className="t-dim text-sm">В просканированной папке пока не найдено альбомов.</p>) : <p className="t-dim text-sm">Подключи сервер, чтобы увидеть реальные альбомы.</p>}
+  </div>
 }
 
 export function AlbumDetail() {
   const { id } = useParams()
+  const [customCovers, setCustomCovers] = useState<Record<string,string>>(() => readAlbumCovers())
   const { tracks, connected, playTrack } = usePlayer()
   const serverTracks = tracks.filter(track => makeSlug(`${track.album}__${track.albumArtist || track.artist}`) === id)
   const albumTitle = serverTracks[0]?.album || 'Альбом не найден'
   const albumArtist = serverTracks[0]?.albumArtist || serverTracks[0]?.artist || ''
-  const cover = serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : '/cover-fallback.svg'
+  const cover = (id && customCovers[id]) || (serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : '/cover-fallback.svg')
 
   return (
     <div className="fade-up">
@@ -261,7 +280,7 @@ export function AlbumDetail() {
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end">
         <div className="relative w-full max-w-[13rem] flex-none">
           <div className="accent-grad pulse-glow absolute -inset-5 rounded-[calc(var(--r-radius)*1.8)] opacity-25 blur-2xl" />
-          <Cover src={cover} alt={`Обложка альбома ${albumTitle}`} className="relative aspect-square w-full" />
+          <div className="relative"><Cover src={cover} alt={`Обложка альбома ${albumTitle}`} className="relative aspect-square w-full"/><label title="Изменить обложку альбома" className="accent-btn absolute bottom-2 right-2 grid h-10 w-10 cursor-pointer place-items-center rounded-full"><ImagePlus size={17}/><input type="file" accept="image/*" className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){window.alert('Изображение должно быть меньше 5 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>{if(typeof reader.result==='string'&&id){const next={...customCovers,[id]:reader.result};setCustomCovers(next);localStorage.setItem(ALBUM_COVERS_KEY,JSON.stringify(next))}};reader.readAsDataURL(file);event.target.value=''}}/></label></div>
         </div>
         <div className="min-w-0 flex-1">
           <p className="t-mute text-[0.68rem] uppercase tracking-[0.16em]">Альбом</p>
@@ -327,54 +346,75 @@ export function ArtistDetail() {
 /* ================================================================== */
 
 export function Playlists() {
-  const { tracks, playlists: userPlaylists, createPlaylist, addTrackToPlaylist, playTrack } = usePlayer()
+  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, playTrack } = usePlayer()
   const [name, setName] = useState('')
-  const [targetId, setTargetId] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [search, setSearch] = useState('')
+  const selected = playlists.find(item => item.id === selectedId) || playlists[0]
+  const selectedTracks = selected ? selected.trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track)) : []
+  const uploadCover = (playlistId: string, file?: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) { window.alert('Изображение должно быть меньше 5 МБ.'); return }
+    const reader = new FileReader()
+    reader.onload = () => { if (typeof reader.result === 'string') updatePlaylist(playlistId, { cover: reader.result }) }
+    reader.readAsDataURL(file)
+  }
   const create = () => {
     const id = createPlaylist(name)
-    if (id) { setTargetId(id); setName('') }
+    if (id) { setSelectedId(id); setName('') }
   }
+  const filteredTracks = tracks.filter(track => !selected?.trackIds.includes(track.id) && `${track.title} ${track.artist} ${track.album}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 80)
   return (
-    <div className="fade-up">
-      <PageHead title="Плейлисты" subtitle="Ваши музыкальные подборки" />
-      <section className="panel mb-6 p-4 md:p-5">
-        <h2 className="mb-3 text-sm font-semibold">Новая подборка</h2>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') create() }} placeholder="Название плейлиста" aria-label="Название плейлиста" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
-          <button type="button" disabled={!name.trim()} onClick={create} className="accent-btn inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40"><Plus size={15} />Создать</button>
-        </div>
+    <div className="fade-up space-y-5">
+      <PageHead title="Плейлисты" subtitle="Создавай подборки, оформляй их обложками и управляй порядком треков" />
+      <section className="panel flex flex-col gap-3 p-4 sm:flex-row">
+        <input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') create() }} placeholder="Название нового плейлиста" aria-label="Название нового плейлиста" className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+        <button type="button" disabled={!name.trim()} onClick={create} className="accent-btn inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold disabled:opacity-40"><Plus size={16}/>Создать плейлист</button>
       </section>
-      {userPlaylists.length ? (
-        <section className="panel mb-6 p-4 md:p-5">
-          <h2 className="mb-3 text-sm font-semibold">Мои плейлисты</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {userPlaylists.map(playlist => {
-              const items = playlist.trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
-              return <div key={playlist.id} className="rounded-xl border border-[var(--r-line)] p-3">
-                <p className="font-medium">{playlist.name}</p>
-                <p className="t-mute mt-1 text-xs">{items.length} треков</p>
-                {items.length ? <div className="mt-2 space-y-1">{items.slice(0, 5).map(track => <button key={track.id} type="button" onClick={() => void playTrack(track)} className="block w-full truncate text-left text-xs t-dim hover:accent-text">{track.title} — {track.artist}</button>)}</div> : <p className="t-mute mt-2 text-xs">Пока нет треков</p>}
+      {!playlists.length ? <div className="panel p-8 text-center"><ListMusic size={30} className="mx-auto accent-text"/><h2 className="mt-3 font-semibold">Пока нет плейлистов</h2><p className="t-dim mt-1 text-sm">Создай первую подборку и добавляй в неё любимые треки.</p></div> : <>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {playlists.map(item => {
+            const coverTrack = tracks.find(track => item.trackIds.includes(track.id))
+            const cover = item.cover || (coverTrack ? `/api/cover/${encodeURIComponent(coverTrack.id)}` : '/cover-fallback.svg')
+            return <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`panel overflow-hidden p-2 text-left transition ${selected?.id === item.id ? 'border-[var(--r-accent)] ring-1 ring-[var(--r-accent)]' : 'hover:bg-[var(--r-panel-2)]'}`}>
+              <img src={cover} alt="" className="aspect-square w-full rounded-xl object-cover"/>
+              <span className="mt-2 block truncate text-sm font-semibold">{item.name}</span>
+              <span className="t-mute block text-xs">{item.trackIds.length} треков</span>
+            </button>
+          })}
+        </div>
+        {selected ? <section className="panel overflow-hidden">
+          <div className="grid gap-5 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:p-5">
+            <div className="relative">
+              <img src={selected.cover || (selectedTracks[0] ? `/api/cover/${encodeURIComponent(selectedTracks[0].id)}` : '/cover-fallback.svg')} alt="" className="aspect-square w-full rounded-2xl object-cover"/>
+              <label className="accent-btn absolute bottom-2 right-2 grid h-10 w-10 cursor-pointer place-items-center rounded-full" title="Загрузить обложку"><ImagePlus size={18}/><input type="file" accept="image/*" className="sr-only" onChange={event => { uploadCover(selected.id,event.target.files?.[0]); event.target.value='' }}/></label>
+            </div>
+            <div className="min-w-0">
+              <p className="t-mute text-xs uppercase tracking-wider">Мой плейлист</p>
+              <input value={selected.name} onChange={event => updatePlaylist(selected.id,{name:event.target.value})} aria-label="Название плейлиста" className="mt-2 h-11 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-xl font-semibold outline-none focus:border-[var(--r-accent)]"/>
+              <textarea value={selected.description || ''} onChange={event => updatePlaylist(selected.id,{description:event.target.value})} placeholder="Описание подборки (необязательно)" rows={2} className="mt-2 w-full resize-y rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] p-3 text-sm outline-none focus:border-[var(--r-accent)]"/>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={!selectedTracks.length} onClick={() => void playTrack(selectedTracks[0])} className="accent-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"><Play size={14} fill="currentColor"/>Слушать</button>
+                <button type="button" onClick={() => { if(window.confirm('Удалить плейлист?')) { deletePlaylist(selected.id); setSelectedId('') } }} className="inline-flex items-center gap-2 rounded-full border border-red-400/30 px-4 py-2 text-sm text-red-300"><Trash2 size={14}/>Удалить</button>
               </div>
-            })}
+            </div>
           </div>
-        </section>
-      ) : null}
-      {userPlaylists.length && tracks.length ? (
-        <section className="panel mb-6 p-4 md:p-5">
-          <h2 className="mb-3 text-sm font-semibold">Добавить музыку в плейлист</h2>
-          <select value={targetId} onChange={event => setTargetId(event.target.value)} aria-label="Выберите плейлист" className="mb-3 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
-            <option value="">Выберите плейлист</option>
-            {userPlaylists.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-          <div className="space-y-1">
-            {tracks.slice(0, 30).map(track => <div key={track.id} className="flex items-center gap-3 py-1.5">
-              <span className="min-w-0 flex-1 truncate text-sm">{track.title} <span className="t-mute">· {track.artist}</span></span>
-              <button type="button" disabled={!targetId || userPlaylists.find(item => item.id === targetId)?.trackIds.includes(track.id)} onClick={() => addTrackToPlaylist(targetId, track.id)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs disabled:opacity-40">Добавить</button>
-            </div>)}
+          <div className="border-t border-[var(--r-line)] p-4">
+            <h3 className="font-semibold">Треки · {selectedTracks.length}</h3>
+            {selectedTracks.length ? <div className="mt-2 space-y-1">{selectedTracks.map((track,index) => <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
+              <span className="t-mute w-5 text-xs">{index+1}</span><img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-10 w-10 rounded-lg object-cover"/>
+              <button type="button" onClick={() => void playTrack(track)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist}</span></button>
+              <button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
+            </div>)}</div> : <p className="t-dim mt-2 text-sm">Добавь первые треки ниже.</p>}
           </div>
-        </section>
-      ) : null}
-
+          <div className="border-t border-[var(--r-line)] p-4">
+            <h3 className="font-semibold">Добавить музыку</h3>
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти трек, исполнителя или альбом…" className="mt-3 h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]"/>
+            <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">{filteredTracks.map(track => <div key={track.id} className="flex items-center gap-3 rounded-lg px-2 py-2"><span className="min-w-0 flex-1 truncate text-sm">{track.title} <span className="t-mute">· {track.artist}</span></span><button type="button" onClick={() => addTrackToPlaylist(selected.id,track.id)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs hover:border-[var(--r-accent)]">Добавить</button></div>)}</div>
+          </div>
+        </section> : null}
+      </>}
     </div>
   )
 }
@@ -611,6 +651,86 @@ export function Player() {
   )
 }
 
+
+/* ================================================================== */
+/*  Редактор метаданных отдельного трека                               */
+/* ================================================================== */
+
+export function TrackMetadataEditor() {
+  const { id = '' } = useParams()
+  const { tracks, connected, accessKey, refreshLibrary } = usePlayer()
+  const track = tracks.find(item => item.id === id)
+  const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
+  const [coverData, setCoverData] = useState('')
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+  const supported = track ? ['MP3','FLAC','M4A','OGG','OPUS'].includes(track.format) : false
+
+  useEffect(() => {
+    if (!id || !accessKey || !connected) return
+    let active = true
+    setMessage('')
+    void fetch(`/api/metadata/${encodeURIComponent(id)}`, { headers: { 'x-resonance-key': accessKey } })
+      .then(async response => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Не удалось прочитать теги')
+        if (active) setMetadata({ title: result.title || '', artist: result.artist || '', album: result.album || '', genre: result.genre || '', year: result.year ? String(result.year) : '', trackNumber: result.trackNumber ? String(result.trackNumber) : '' })
+      })
+      .catch(cause => { if (active) setMessage(cause instanceof Error ? cause.message : 'Ошибка чтения тегов') })
+    return () => { active = false }
+  }, [id, accessKey, connected])
+
+  const save = async () => {
+    if (!id || !supported) return
+    setSaving(true); setMessage('')
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(id)}`, { method:'PUT', headers:{'Content-Type':'application/json','x-resonance-key':accessKey}, body:JSON.stringify(coverData ? {...metadata,coverData} : metadata) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
+      await refreshLibrary()
+      setCoverData('')
+      setMessage('Изменения сохранены. Исходный файл помещён в резервную копию.')
+    } catch(cause) { setMessage(cause instanceof Error ? cause.message : 'Ошибка сохранения') }
+    finally { setSaving(false) }
+  }
+
+  const restore = async () => {
+    if (!id) return
+    setSaving(true); setMessage('')
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(id)}/restore`, {method:'POST',headers:{'x-resonance-key':accessKey}})
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить оригинал')
+      await refreshLibrary()
+      setMessage('Оригинальные метаданные восстановлены.')
+    } catch(cause) { setMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления') }
+    finally { setSaving(false) }
+  }
+
+  if (!connected) return <div className="panel p-5"><p className="t-dim">Сначала подключи музыкальный сервер.</p><Link to="/settings" className="accent-text mt-3 inline-block">Открыть настройки сервера</Link></div>
+  if (!track) return <div className="panel p-5"><p className="t-dim">Трек не найден в текущей библиотеке.</p><Link to="/library" className="accent-text mt-3 inline-block">Вернуться в библиотеку</Link></div>
+  return <div className="fade-up mx-auto max-w-3xl">
+    <Link to="/library" className="t-dim mb-5 inline-flex items-center gap-2 text-sm hover:text-[var(--r-text)]"><ArrowLeft size={16}/>Назад в библиотеку</Link>
+    <PageHead title="Метаданные трека" subtitle="Изменения записываются непосредственно в аудиофайл; перед записью создаётся резервная копия."/>
+    <section className="panel p-4 sm:p-6">
+      <div className="mb-5 flex items-center gap-4">
+        <img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-20 w-20 rounded-xl object-cover"/>
+        <div className="min-w-0"><p className="truncate font-semibold">{track.title}</p><p className="t-dim truncate text-sm">{track.artist} · {track.format}</p><p className="t-mute mt-1 text-xs">{track.relativePath}</p></div>
+      </div>
+      {!supported ? <p className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-200">Редактирование тегов для формата {track.format} пока не поддерживается.</p> : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(['title','artist','album','genre','year','trackNumber'] as const).map(field => <label key={field} className="block"><span className="t-mute mb-1.5 block text-xs">{({title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',trackNumber:'Номер дорожки'})[field]}</span><input disabled={!supported} value={metadata[field]} onChange={event=>setMetadata(value=>({...value,[field]:event.target.value}))} className="h-11 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)] disabled:opacity-50"/></label>)}
+      </div>
+      <div className="mt-5 rounded-xl border border-dashed border-[var(--r-line)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-medium">Обложка трека</p><p className="t-mute mt-1 text-xs">JPG или PNG, до 8 МБ</p></div><label className="accent-btn inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm"><ImagePlus size={15}/>Выбрать изображение<input type="file" accept="image/jpeg,image/png" className="sr-only" disabled={!supported} onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>8*1024*1024){setMessage('Изображение должно быть не больше 8 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>setCoverData(typeof reader.result==='string'?reader.result:'');reader.readAsDataURL(file);event.target.value=''}}/></label></div>
+        {coverData ? <div className="mt-3 flex items-center gap-3"><img src={coverData} alt="Новая обложка" className="h-16 w-16 rounded-lg object-cover"/><span className="text-xs text-emerald-400">Новая обложка выбрана</span><button type="button" onClick={()=>setCoverData('')} className="t-mute text-xs underline">Отменить</button></div> : null}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2"><button type="button" disabled={!supported||saving} onClick={()=>void save()} className="accent-btn inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40"><Save size={15}/>{saving?'Сохранение…':'Сохранить изменения'}</button><button type="button" disabled={saving} onClick={()=>void restore()} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm"><RotateCcw size={14}/>Восстановить оригинал</button></div>
+      {message ? <p role="status" className="t-dim mt-4 text-sm">{message}</p> : null}
+    </section>
+  </div>
+}
+
 /* ================================================================== */
 /*  Настройки                                                          */
 /* ================================================================== */
@@ -623,8 +743,6 @@ export function Settings() {
   const [uploading, setUploading] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [metadataBackups, setMetadataBackups] = useState<MetadataBackup[]>([])
-  const [editTrackId, setEditTrackId] = useState('')
-  const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
@@ -671,59 +789,6 @@ export function Settings() {
     }
   }
 
-  useEffect(() => {
-    if (!editTrackId || !accessKey) return
-    let active = true
-    setMetadataMessage('')
-    void fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, { headers: { 'x-resonance-key': accessKey } })
-      .then(async response => {
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Не удалось прочитать теги')
-        if (active) setMetadata({ title: result.title || '', artist: result.artist || '', album: result.album || '', genre: result.genre || '', year: result.year ? String(result.year) : '', trackNumber: result.trackNumber ? String(result.trackNumber) : '' })
-      })
-      .catch(cause => { if (active) setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка чтения тегов') })
-    return () => { active = false }
-  }, [editTrackId, accessKey])
-
-  const saveTags = async () => {
-    if (!editTrackId) return
-    setSavingMetadata(true)
-    setMetadataMessage('')
-    try {
-      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-resonance-key': accessKey },
-        body: JSON.stringify(coverData ? { ...metadata, coverData } : metadata),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
-      await refreshLibrary()
-      await loadMetadataBackups()
-      setCoverData('')
-      setMetadataMessage('Теги сохранены. Резервная копия исходного файла создана.')
-    } catch (cause) {
-      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка записи тегов')
-    } finally {
-      setSavingMetadata(false)
-    }
-  }
-
-  const restoreTags = async () => {
-    if (!editTrackId) return
-    setSavingMetadata(true)
-    try {
-      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}/restore`, { method: 'POST', headers: { 'x-resonance-key': accessKey } })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить копию')
-      await refreshLibrary()
-      setMetadataMessage('Последняя резервная копия восстановлена.')
-    } catch (cause) {
-      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления')
-    } finally {
-      setSavingMetadata(false)
-    }
-  }
-
   return (
     <div className="fade-up">
       <PageHead
@@ -738,8 +803,10 @@ export function Settings() {
           Открыть панель
         </button>
       </PageHead>
-
-      <section className="panel mb-5 p-4 md:p-5">
+      <nav aria-label="Разделы настроек" className="sticky top-0 z-20 mb-5 flex gap-2 overflow-x-auto rounded-xl border border-[var(--r-line)] bg-[var(--r-app)]/90 p-2 backdrop-blur">
+        {[['#server-settings','Сервер'],['#playback-settings','Переходы'],['#audio-settings','Звук'],['#data-settings','Данные'],['#appearance-settings','Внешний вид']].map(([href,label])=><a key={href} href={href} className="shrink-0 rounded-full border border-[var(--r-line)] px-3 py-2 text-xs font-medium text-[var(--r-text-dim)] hover:border-[var(--r-accent)] hover:text-[var(--r-text)]">{label}</a>)}
+      </nav>
+      <section id="server-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -788,46 +855,6 @@ export function Settings() {
 
       {connected ? (
         <section className="panel mb-5 p-4 md:p-5">
-          <h2 className="text-base font-semibold">Редактор метаданных</h2>
-          <p className="t-dim mt-1 text-sm">Изменяйте название, исполнителя, альбом, жанр, год и номер дорожки. Перед записью сервер сохраняет оригинал.</p>
-          <select value={editTrackId} onChange={event => setEditTrackId(event.target.value)} aria-label="Трек для редактирования" className="mt-4 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
-            <option value="">Выберите трек</option>
-            {tracks.filter(track => ['MP3', 'FLAC', 'M4A', 'OGG', 'OPUS'].includes(track.format)).map(track => <option key={track.id} value={track.id}>{track.title} — {track.artist} ({track.format})</option>)}
-          </select>
-          {editTrackId ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {(['title', 'artist', 'album', 'genre', 'year', 'trackNumber'] as const).map(field => (
-                <label key={field} className="block">
-                  <span className="t-mute mb-1 block text-xs">{({ title: 'Название', artist: 'Исполнитель', album: 'Альбом', genre: 'Жанр', year: 'Год', trackNumber: 'Номер дорожки' })[field]}</span>
-                  <input value={metadata[field]} onChange={event => setMetadata(value => ({ ...value, [field]: event.target.value }))} className="h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]" />
-                </label>
-              ))}
-              <label className="block sm:col-span-2">
-                <span className="t-mute mb-1 block text-xs">Новая обложка (JPG или PNG, до 8 МБ)</span>
-                <input type="file" accept="image/jpeg,image/png" onChange={event => {
-                  const file = event.target.files?.[0]
-                  if (!file) return
-                  if (file.size > 8 * 1024 * 1024) { setMetadataMessage('Обложка должна быть не больше 8 МБ.'); event.target.value = ''; return }
-                  const reader = new FileReader()
-                  reader.onload = () => setCoverData(typeof reader.result === 'string' ? reader.result : '')
-                  reader.onerror = () => setMetadataMessage('Не удалось прочитать изображение.')
-                  reader.readAsDataURL(file)
-                  event.target.value = ''
-                }} className="block w-full text-sm t-dim file:mr-3 file:rounded-full file:border-0 file:bg-[var(--r-panel-2)] file:px-4 file:py-2 file:text-xs file:font-medium file:text-[var(--r-text)]" />
-                {coverData ? <span className="mt-1 block text-xs text-emerald-400">Обложка готова к сохранению</span> : null}
-              </label>
-              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
-                <button type="button" disabled={savingMetadata} onClick={() => void saveTags()} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{savingMetadata ? 'Сохранение…' : 'Сохранить теги'}</button>
-                <button type="button" disabled={savingMetadata} onClick={() => void restoreTags()} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm disabled:opacity-50">Восстановить копию</button>
-              </div>
-            </div>
-          ) : null}
-          {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
-        </section>
-      ) : null}
-
-      {connected ? (
-        <section className="panel mb-5 p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div><h2 className="text-base font-semibold">Резервные копии тегов</h2><p className="t-dim mt-1 text-xs">{metadataBackups.length} копий сохранено на компьютере</p></div>
             <button type="button" onClick={() => void loadMetadataBackups()} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs">Обновить</button>
@@ -842,7 +869,7 @@ export function Settings() {
         </section>
       ) : null}
 
-      <section className="panel mb-5 p-4 md:p-5">
+      <section id="playback-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Переход между треками</h2>
@@ -853,7 +880,7 @@ export function Settings() {
         <input type="range" min={0} max={8} step={1} value={crossfadeSeconds} onChange={event => setCrossfadeSeconds(Number(event.target.value))} aria-label="Длительность crossfade" className="r-range mt-4 w-full" style={{ ['--_p' as string]: `${crossfadeSeconds / 8 * 100}%` } as CSSProperties} />
       </section>
 
-      <section className="panel mb-5 p-4 md:p-5">
+      <section id="audio-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Эквалайзер</h2>
@@ -874,7 +901,7 @@ export function Settings() {
         </div>
       </section>
 
-      <section className="panel mb-5 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
+      <section id="data-settings" className="panel mb-5 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
         <div>
           <h2 className="text-base font-semibold">Резервная копия коллекции</h2>
           <p className="t-dim mt-1 text-sm">Экспорт и импорт избранного, плейлистов, истории, очереди и настроек звука. Аудиофайлы не включаются.</p>
@@ -904,7 +931,7 @@ export function Settings() {
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="panel p-5 md:p-6">
+        <div id="appearance-settings" className="panel p-5 md:p-6">
           <AppearanceControls />
         </div>
 
@@ -1004,7 +1031,7 @@ export function About() {
           },
           {
             title: 'Статус',
-            text: 'Только фронтенд: воспроизведение и хранение музыки не подключены.',
+            text: 'Локальный музыкальный сервер, потоковое воспроизведение, очередь, избранное, плейлисты, эквалайзер и офлайн-загрузки.',
           },
         ].map((item) => (
           <div key={item.title} className="panel p-5">
@@ -1014,10 +1041,7 @@ export function About() {
         ))}
       </div>
 
-      <p className="t-mute mt-5 text-[0.72rem] leading-relaxed">
-        Демо-контент: названия треков, исполнителей и обложки используются как заполнители для
-        макета.
-      </p>
+      <p className="t-mute mt-5 text-[0.72rem] leading-relaxed">Музыка хранится на твоём компьютере. Resonance открывает её на других устройствах через защищённое соединение; пользовательские обложки и параметры интерфейса хранятся локально в браузере.</p>
 
       <Link
         to="/"
