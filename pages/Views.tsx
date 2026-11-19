@@ -12,6 +12,11 @@ import {
   ListFilter,
   ListMusic,
   MoreHorizontal,
+  Pencil,
+  Trash2,
+  ImagePlus,
+  Save,
+  RotateCcw,
   Pause,
   Play,
   Plus,
@@ -114,6 +119,7 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
             </button>
             <span className="t-mute hidden text-xs tabular-nums sm:block">{formatTime(track.duration)}</span>
             <button type="button" onClick={() => toggleFavorite(track.id)} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} aria-pressed={liked} className={`grid h-8 w-8 place-items-center rounded-full hover:bg-[var(--r-panel-2)] ${liked ? 'text-[var(--r-accent)]' : 't-mute'}`}><Heart size={15} fill={liked ? 'currentColor' : 'none'} /></button>
+            <Link to={`/tracks/${encodeURIComponent(track.id)}/edit`} aria-label={`Редактировать ${track.title}`} title="Редактировать трек" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] hover:accent-text"><Pencil size={15} /></Link>
             <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)]"><Plus size={16} /></button>
           </div>
         )
@@ -327,54 +333,75 @@ export function ArtistDetail() {
 /* ================================================================== */
 
 export function Playlists() {
-  const { tracks, playlists: userPlaylists, createPlaylist, addTrackToPlaylist, playTrack } = usePlayer()
+  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, playTrack } = usePlayer()
   const [name, setName] = useState('')
-  const [targetId, setTargetId] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [search, setSearch] = useState('')
+  const selected = playlists.find(item => item.id === selectedId) || playlists[0]
+  const selectedTracks = selected ? selected.trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track)) : []
+  const uploadCover = (playlistId: string, file?: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) { window.alert('Изображение должно быть меньше 5 МБ.'); return }
+    const reader = new FileReader()
+    reader.onload = () => { if (typeof reader.result === 'string') updatePlaylist(playlistId, { cover: reader.result }) }
+    reader.readAsDataURL(file)
+  }
   const create = () => {
     const id = createPlaylist(name)
-    if (id) { setTargetId(id); setName('') }
+    if (id) { setSelectedId(id); setName('') }
   }
+  const filteredTracks = tracks.filter(track => !selected?.trackIds.includes(track.id) && `${track.title} ${track.artist} ${track.album}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 80)
   return (
-    <div className="fade-up">
-      <PageHead title="Плейлисты" subtitle="Ваши музыкальные подборки" />
-      <section className="panel mb-6 p-4 md:p-5">
-        <h2 className="mb-3 text-sm font-semibold">Новая подборка</h2>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') create() }} placeholder="Название плейлиста" aria-label="Название плейлиста" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
-          <button type="button" disabled={!name.trim()} onClick={create} className="accent-btn inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40"><Plus size={15} />Создать</button>
-        </div>
+    <div className="fade-up space-y-5">
+      <PageHead title="Плейлисты" subtitle="Создавай подборки, оформляй их обложками и управляй порядком треков" />
+      <section className="panel flex flex-col gap-3 p-4 sm:flex-row">
+        <input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') create() }} placeholder="Название нового плейлиста" aria-label="Название нового плейлиста" className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+        <button type="button" disabled={!name.trim()} onClick={create} className="accent-btn inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold disabled:opacity-40"><Plus size={16}/>Создать плейлист</button>
       </section>
-      {userPlaylists.length ? (
-        <section className="panel mb-6 p-4 md:p-5">
-          <h2 className="mb-3 text-sm font-semibold">Мои плейлисты</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {userPlaylists.map(playlist => {
-              const items = playlist.trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
-              return <div key={playlist.id} className="rounded-xl border border-[var(--r-line)] p-3">
-                <p className="font-medium">{playlist.name}</p>
-                <p className="t-mute mt-1 text-xs">{items.length} треков</p>
-                {items.length ? <div className="mt-2 space-y-1">{items.slice(0, 5).map(track => <button key={track.id} type="button" onClick={() => void playTrack(track)} className="block w-full truncate text-left text-xs t-dim hover:accent-text">{track.title} — {track.artist}</button>)}</div> : <p className="t-mute mt-2 text-xs">Пока нет треков</p>}
+      {!playlists.length ? <div className="panel p-8 text-center"><ListMusic size={30} className="mx-auto accent-text"/><h2 className="mt-3 font-semibold">Пока нет плейлистов</h2><p className="t-dim mt-1 text-sm">Создай первую подборку и добавляй в неё любимые треки.</p></div> : <>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {playlists.map(item => {
+            const coverTrack = tracks.find(track => item.trackIds.includes(track.id))
+            const cover = item.cover || (coverTrack ? `/api/cover/${encodeURIComponent(coverTrack.id)}` : '/cover-fallback.svg')
+            return <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`panel overflow-hidden p-2 text-left transition ${selected?.id === item.id ? 'border-[var(--r-accent)] ring-1 ring-[var(--r-accent)]' : 'hover:bg-[var(--r-panel-2)]'}`}>
+              <img src={cover} alt="" className="aspect-square w-full rounded-xl object-cover"/>
+              <span className="mt-2 block truncate text-sm font-semibold">{item.name}</span>
+              <span className="t-mute block text-xs">{item.trackIds.length} треков</span>
+            </button>
+          })}
+        </div>
+        {selected ? <section className="panel overflow-hidden">
+          <div className="grid gap-5 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:p-5">
+            <div className="relative">
+              <img src={selected.cover || (selectedTracks[0] ? `/api/cover/${encodeURIComponent(selectedTracks[0].id)}` : '/cover-fallback.svg')} alt="" className="aspect-square w-full rounded-2xl object-cover"/>
+              <label className="accent-btn absolute bottom-2 right-2 grid h-10 w-10 cursor-pointer place-items-center rounded-full" title="Загрузить обложку"><ImagePlus size={18}/><input type="file" accept="image/*" className="sr-only" onChange={event => { uploadCover(selected.id,event.target.files?.[0]); event.target.value='' }}/></label>
+            </div>
+            <div className="min-w-0">
+              <p className="t-mute text-xs uppercase tracking-wider">Мой плейлист</p>
+              <input value={selected.name} onChange={event => updatePlaylist(selected.id,{name:event.target.value})} aria-label="Название плейлиста" className="mt-2 h-11 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-xl font-semibold outline-none focus:border-[var(--r-accent)]"/>
+              <textarea value={selected.description || ''} onChange={event => updatePlaylist(selected.id,{description:event.target.value})} placeholder="Описание подборки (необязательно)" rows={2} className="mt-2 w-full resize-y rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] p-3 text-sm outline-none focus:border-[var(--r-accent)]"/>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={!selectedTracks.length} onClick={() => void playTrack(selectedTracks[0])} className="accent-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"><Play size={14} fill="currentColor"/>Слушать</button>
+                <button type="button" onClick={() => { if(window.confirm('Удалить плейлист?')) { deletePlaylist(selected.id); setSelectedId('') } }} className="inline-flex items-center gap-2 rounded-full border border-red-400/30 px-4 py-2 text-sm text-red-300"><Trash2 size={14}/>Удалить</button>
               </div>
-            })}
+            </div>
           </div>
-        </section>
-      ) : null}
-      {userPlaylists.length && tracks.length ? (
-        <section className="panel mb-6 p-4 md:p-5">
-          <h2 className="mb-3 text-sm font-semibold">Добавить музыку в плейлист</h2>
-          <select value={targetId} onChange={event => setTargetId(event.target.value)} aria-label="Выберите плейлист" className="mb-3 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
-            <option value="">Выберите плейлист</option>
-            {userPlaylists.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-          <div className="space-y-1">
-            {tracks.slice(0, 30).map(track => <div key={track.id} className="flex items-center gap-3 py-1.5">
-              <span className="min-w-0 flex-1 truncate text-sm">{track.title} <span className="t-mute">· {track.artist}</span></span>
-              <button type="button" disabled={!targetId || userPlaylists.find(item => item.id === targetId)?.trackIds.includes(track.id)} onClick={() => addTrackToPlaylist(targetId, track.id)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs disabled:opacity-40">Добавить</button>
-            </div>)}
+          <div className="border-t border-[var(--r-line)] p-4">
+            <h3 className="font-semibold">Треки · {selectedTracks.length}</h3>
+            {selectedTracks.length ? <div className="mt-2 space-y-1">{selectedTracks.map((track,index) => <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
+              <span className="t-mute w-5 text-xs">{index+1}</span><img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-10 w-10 rounded-lg object-cover"/>
+              <button type="button" onClick={() => void playTrack(track)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist}</span></button>
+              <button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
+            </div>)}</div> : <p className="t-dim mt-2 text-sm">Добавь первые треки ниже.</p>}
           </div>
-        </section>
-      ) : null}
-
+          <div className="border-t border-[var(--r-line)] p-4">
+            <h3 className="font-semibold">Добавить музыку</h3>
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти трек, исполнителя или альбом…" className="mt-3 h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]"/>
+            <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">{filteredTracks.map(track => <div key={track.id} className="flex items-center gap-3 rounded-lg px-2 py-2"><span className="min-w-0 flex-1 truncate text-sm">{track.title} <span className="t-mute">· {track.artist}</span></span><button type="button" onClick={() => addTrackToPlaylist(selected.id,track.id)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs hover:border-[var(--r-accent)]">Добавить</button></div>)}</div>
+          </div>
+        </section> : null}
+      </>}
     </div>
   )
 }
