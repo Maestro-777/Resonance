@@ -44,7 +44,7 @@ type PlayerContextValue = {
   favorites: string[]
   history: string[]
   playlists: UserPlaylist[]
-  createPlaylist: (name: string) => void
+  createPlaylist: (name: string) => string | null
   addTrackToPlaylist: (playlistId: string, trackId: string) => void
   loading: boolean
   error: string | null
@@ -236,8 +236,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const createPlaylist = useCallback((name: string) => {
     const clean = name.trim().slice(0, 120)
-    if (!clean) return
-    setPlaylists(items => [...items, { id: crypto.randomUUID(), name: clean, trackIds: [] }])
+    if (!clean) return null
+    const id = crypto.randomUUID()
+    setPlaylists(items => [...items, { id, name: clean, trackIds: [] }])
+    return id
   }, [])
 
   const addTrackToPlaylist = useCallback((playlistId: string, trackId: string) => {
