@@ -26,7 +26,6 @@ import {
 } from 'lucide-react'
 import {
   covers,
-  libraryFilters,
 } from '@/data'
 import { AppearanceControls, useAppearance } from '@/theme'
 import { Cover, SectionHeader } from '@/components/Shell'
@@ -181,7 +180,6 @@ export function Home() {
 /* ================================================================== */
 
 export function Library() {
-  const [filter, setFilter] = useState<string>(libraryFilters[0])
   const [sort, setSort] = useState('default')
   const { tracks, connected } = usePlayer()
   const [searchParams] = useSearchParams()
@@ -213,27 +211,6 @@ export function Library() {
           />
         </label>
       </PageHead>
-
-      <div className="no-scrollbar mb-6 flex gap-2 overflow-x-auto">
-        {libraryFilters.map((item) => {
-          const active = item === filter
-          return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              aria-pressed={active}
-              className={`accent-ring whitespace-nowrap rounded-full px-4 py-2 text-[0.8rem] font-medium transition-colors ${
-                active
-                  ? 'accent-grad text-white accent-shadow'
-                  : 'border border-[var(--r-line-2)] text-[var(--r-text)] hover:bg-[var(--r-panel)]'
-              }`}
-            >
-              {item}
-            </button>
-          )
-        })}
-      </div>
 
       {connected ? (
         <section className="panel mb-8 p-4 md:p-5">
