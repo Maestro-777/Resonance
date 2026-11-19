@@ -657,35 +657,29 @@ const flatTracks = albums.flatMap((album) =>
 )
 
 export function Favorites() {
+  const { tracks, favorites, playTrack } = usePlayer()
+  const items = favorites.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
   return (
     <div className="fade-up">
-      <PageHead title="Избранное" subtitle="Треки, которые вы отметили">
-        <Link
-          to="/player"
-          className="accent-btn accent-ring inline-flex h-10 items-center gap-2 rounded-full px-4 text-[0.82rem] font-semibold"
-        >
-          <Play size={14} fill="currentColor" />
-          Слушать всё
-        </Link>
+      <PageHead title="Избранное" subtitle={`${items.length} сохранённых треков`}>
+        <button type="button" disabled={!items.length} onClick={() => void playTrack(items[0])} className="accent-btn accent-ring inline-flex h-10 items-center gap-2 rounded-full px-4 text-[0.82rem] font-semibold disabled:opacity-40"><Play size={14} fill="currentColor" />Слушать всё</button>
       </PageHead>
-      <TrackList items={flatTracks.slice(0, 8)} withCover activeIndex={-1} />
+      <ServerTrackRows items={items} />
     </div>
   )
 }
 
 export function History() {
+  const { tracks, history } = usePlayer()
+  const items = history.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
   return (
     <div className="fade-up">
-      <PageHead title="История" subtitle="Последние прослушанные треки" />
-      <TrackList items={recentlyPlayed.map((item) => ({
-        title: item.title,
-        artist: item.artist,
-        duration: '3:48',
-        cover: item.cover,
-      }))} withCover activeIndex={0} />
+      <PageHead title="История" subtitle={`${items.length} недавно прослушанных треков`} />
+      <ServerTrackRows items={items} />
     </div>
   )
 }
+
 
 export function Offline() {
   return (
