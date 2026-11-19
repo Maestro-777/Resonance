@@ -87,6 +87,18 @@ function MediaCard({
   )
 }
 
+
+const ALBUM_COVERS_KEY = 'resonance.albumCovers.v1'
+function readAlbumCovers(): Record<string,string> {
+  try { const value = JSON.parse(localStorage.getItem(ALBUM_COVERS_KEY) || '{}'); return value && typeof value === 'object' ? value : {} } catch { return {} }
+}
+function AlbumCard({ album, cover, onCover }: { album: {id:string;title:string;artist:string;year:string|number;cover:string}, cover:string, onCover:(id:string,data:string)=>void }) {
+  return <div className="group relative min-w-0">
+    <MediaCard title={album.title} subtitle={`${album.artist} · ${album.year || 'год неизвестен'}`} cover={cover || album.cover} to={`/albums/${album.id}`} ratio="square"/>
+    <label title="Изменить обложку альбома" className="absolute right-2 top-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-white/20 bg-black/65 text-white opacity-100 backdrop-blur transition sm:opacity-0 sm:group-hover:opacity-100"><ImagePlus size={16}/><input type="file" accept="image/*" className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){window.alert('Изображение должно быть меньше 5 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>{if(typeof reader.result==='string')onCover(album.id,reader.result)};reader.readAsDataURL(file);event.target.value=''}}/></label>
+  </div>
+}
+
 type MetadataBackup = { id: string; filename: string; trackId: string; createdAt: string; size: number }
 
 function parseLrc(content: string) {
@@ -238,6 +250,8 @@ export function Library() {
 
 export function Albums() {
   const { tracks, connected } = usePlayer()
+  const [covers, setCovers] = useState<Record<string,string>>(() => readAlbumCovers())
+  const saveCover = (id:string,data:string) => { const next={...covers,[id]:data};setCovers(next);localStorage.setItem(ALBUM_COVERS_KEY,JSON.stringify(next)) }
   const serverAlbums = Array.from(tracks.filter(track => track.album && track.album !== 'Без альбома').reduce((map, track) => {
     const key = `${track.album}__${track.albumArtist || track.artist}`
     const current = map.get(key) || []
@@ -245,12 +259,10 @@ export function Albums() {
     map.set(key, current)
     return map
   }, new Map<string, LibraryTrack[]>()), ([key, items]) => ({ id: makeSlug(key), title: items[0].album, artist: items[0].albumArtist || items[0].artist, year: items.find(item => item.year)?.year || '', tracks: items, cover: `/api/cover/${encodeURIComponent(items[0].id)}` }))
-  return (
-    <div className="fade-up">
-      <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов в вашей библиотеке` : 'Коллекции треков из вашей библиотеки'} />
-      {connected ? (serverAlbums.length ? <div className="media-grid">{serverAlbums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year || 'год неизвестен'}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div> : <p className="t-dim text-sm">В просканированной папке пока не найдено альбомов.</p>) : <p className="t-dim text-sm">Подключи сервер, чтобы увидеть реальные альбомы. Демонстрационные записи скрыты.</p>}
-    </div>
-  )
+  return <div className="fade-up">
+    <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов · нажми на значок изображения, чтобы назначить обложку` : 'Альбомы твоей музыкальной библиотеки'}/>
+    {connected ? (serverAlbums.length ? <div className="media-grid">{serverAlbums.map(album=><AlbumCard key={album.id} album={album} cover={covers[album.id] || album.cover} onCover={saveCover}/>)}</div> : <p className="t-dim text-sm">В просканированной папке пока не найдено альбомов.</p>) : <p className="t-dim text-sm">Подключи сервер, чтобы увидеть реальные альбомы.</p>}
+  </div>
 }
 
 export function AlbumDetail() {
