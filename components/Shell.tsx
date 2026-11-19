@@ -353,7 +353,7 @@ function PlayerBar({ compact = false }: { compact?: boolean }) {
     return (
       <div className="flex items-center gap-3 px-3 py-2">
         <Link to="/player" className="flex min-w-0 flex-1 items-center gap-2.5">
-          <img src={cover} alt="Обложка трека" className="h-10 w-10 flex-none rounded-lg object-cover" />
+          <img src={cover} alt="Обложка трека" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} className="h-10 w-10 flex-none rounded-lg object-cover" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <PlayingBars active={isPlaying} />
