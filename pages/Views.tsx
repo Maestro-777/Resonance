@@ -514,7 +514,8 @@ export function Offline() {
               const isSaved = saved.some(item => item.id === track.id)
               return <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2">
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist} · {formatTime(track.duration)}</span></span>
-                <button type="button" disabled={isSaved || busyId === track.id} onClick={() => void save(track)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs font-medium disabled:opacity-40">{isSaved ? 'Сохранён' : busyId === track.id ? 'Загрузка…' : 'Скачать'}</button>
+                <a href={`/api/download/${encodeURIComponent(track.id)}`} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--r-panel-2)]" title="Скачать исходный аудиофайл">Прямая ссылка</a>
+                <button type="button" disabled={isSaved || busyId === track.id} onClick={() => void save(track)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs font-medium disabled:opacity-40">{isSaved ? 'Офлайн' : busyId === track.id ? 'Загрузка…' : 'В офлайн'}</button>
               </div>
             })}
           </div>
@@ -743,6 +744,9 @@ export function Settings() {
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [remoteUrl, setRemoteUrl] = useState('')
+  const [remoteImporting, setRemoteImporting] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [metadataBackups, setMetadataBackups] = useState<MetadataBackup[]>([])
   const [metadataMessage, setMetadataMessage] = useState('')
@@ -824,25 +828,57 @@ export function Settings() {
               <button type="button" onClick={disconnect} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">Отключить сервер</button>
               <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено. Список треков обновлён.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование папки…' : 'Обновить мои треки'}</button>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
-                {uploading ? 'Загрузка…' : 'Загрузить музыку'}
-                <input type="file" accept="audio/*,.flac,.opus,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
+                {uploading ? `Загрузка… ${uploadProgress}%` : 'Выбрать несколько файлов'}
+                <input type="file" accept="audio/*,.mp3,.flac,.m4a,.aac,.ogg,.opus,.wav,.wma,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
                   const files = event.target.files
                   if (!files?.length) return
+                  if (files.length > 40) { setServerMessage('За один раз можно загрузить не более 40 файлов.'); event.target.value = ''; return }
                   const body = new FormData()
                   Array.from(files).forEach(file => body.append('files', file))
                   setUploading(true)
-                  setServerMessage('')
-                  void fetch('/api/uploads', { method: 'POST', headers: { 'x-resonance-key': accessKey }, body }).then(async response => {
-                    const result = await response.json()
-                    if (!response.ok) throw new Error(result.error || 'Не удалось загрузить файлы')
-                    return refreshLibrary().then(() => setServerMessage(`Загружено файлов: ${result.uploaded}`))
-                  }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки')).finally(() => setUploading(false))
+                  setUploadProgress(0)
+                  setServerMessage(`Подготовка к загрузке: ${files.length} файлов…`)
+                  const xhr = new XMLHttpRequest()
+                  xhr.open('POST', '/api/uploads')
+                  xhr.setRequestHeader('x-resonance-key', accessKey)
+                  xhr.upload.onprogress = event => { if (event.lengthComputable) setUploadProgress(Math.round(event.loaded / event.total * 100)) }
+                  xhr.onload = () => {
+                    try {
+                      const result = JSON.parse(xhr.responseText || '{}')
+                      if (xhr.status < 200 || xhr.status >= 300) throw new Error(result.error || 'Не удалось загрузить файлы')
+                      void refreshLibrary().then(() => setServerMessage(`Готово: загружено ${result.uploaded} из ${files.length} файлов.`)).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Файлы загружены, но библиотека не обновилась.'))
+                    } catch (cause) { setServerMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки') }
+                    finally { setUploading(false); setUploadProgress(0) }
+                  }
+                  xhr.onerror = () => { setServerMessage('Соединение прервано. Проверь сервер и повтори загрузку.'); setUploading(false); setUploadProgress(0) }
+                  xhr.send(body)
                   event.target.value = ''
                 }} />
               </label>
             </div>
           ) : null}
         </div>
+        {connected ? (
+          <div className="mt-4 rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] p-3 md:p-4">
+            <h3 className="text-sm font-semibold">Скачать музыку по прямой ссылке</h3>
+            <p className="t-mute mt-1 text-xs">Вставь прямой HTTP/HTTPS-адрес аудиофайла. Файл сохранится в папку Resonance Uploads и появится в библиотеке.</p>
+            <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={event => {
+              event.preventDefault()
+              if (!remoteUrl.trim() || remoteImporting) return
+              setRemoteImporting(true)
+              setServerMessage('Скачивание файла по ссылке…')
+              void fetch('/api/import-url', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-resonance-key': accessKey }, body: JSON.stringify({ url: remoteUrl.trim() }) })
+                .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Не удалось скачать файл'); return result })
+                .then(result => refreshLibrary().then(() => { setServerMessage(`Добавлен трек: ${result.track?.title || result.filename}`); setRemoteUrl('') }))
+                .catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка скачивания по ссылке'))
+                .finally(() => setRemoteImporting(false))
+            }}>
+              <input type="url" required value={remoteUrl} onChange={event => setRemoteUrl(event.target.value)} disabled={remoteImporting} placeholder="https://example.com/music/song.mp3" aria-label="Прямая ссылка на аудиофайл" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel-2)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+              <button type="submit" disabled={!remoteUrl.trim() || remoteImporting} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{remoteImporting ? 'Скачивание…' : 'Скачать по ссылке'}</button>
+            </form>
+            {uploading ? <div className="mt-3"><div className="mb-1 flex justify-between text-xs t-mute"><span>Загрузка выбранных файлов</span><span>{uploadProgress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-[var(--r-panel-2)]"><div className="h-full rounded-full bg-[var(--r-accent)] transition-[width]" style={{ width: uploadProgress + '%' }} /></div></div> : null}
+          </div>
+        ) : null}
         {!connected ? <div className="mt-3"><p className="text-xs t-mute">Открой файл server/.env в папке Resonance на компьютере. Нужна строка RESONANCE_ACCESS_KEY=…</p></div> : null}
         {!connected ? (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
