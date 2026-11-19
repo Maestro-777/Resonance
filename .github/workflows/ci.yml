@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "integration/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run check
+      - run: npm test
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm run install:all
+      - name: Generate local server configuration
+        shell: pwsh
+        run: |
+          ./scripts/setup.ps1
+          $config = Get-Content server/.env -Raw
+          if ($config -notmatch '(?m)^RESONANCE_ACCESS_KEY=\S+') {
+            throw 'The setup script did not generate an access key.'
+          }
+      - run: npm run build

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AudioLines,
   Bell,
@@ -26,11 +26,11 @@ import {
   covers,
   libraryTiles,
   mainNav,
-  nowPlaying,
   secondaryNav,
   type LibraryTile,
 } from '@/data'
 import { AppearancePanel, useAppearance, type ThemeId } from '@/theme'
+import { formatTime, usePlayer } from '@/player/PlayerContext'
 
 /* ================================================================== */
 /*  Общие элементы                                                     */
@@ -52,7 +52,7 @@ export function Cover({
       className={`cover-art ${className}`}
       style={rounded ? { borderRadius: rounded } : undefined}
     >
-      <img src={src} alt={alt} loading="lazy" />
+      <img src={src} alt={alt} loading="lazy" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} />
     </div>
   )
 }
@@ -244,6 +244,8 @@ const themeOrder: ThemeId[] = ['night', 'amethyst', 'graphite', 'oled']
 
 function Topbar() {
   const { appearance, update, setPanelOpen } = useAppearance()
+  const navigate = useNavigate()
+  const [searchQuery, setSearchQuery] = useState('')
 
   const cycleTheme = () => {
     const index = themeOrder.indexOf(appearance.theme)
@@ -273,6 +275,9 @@ function Topbar() {
         />
         <input
           type="search"
+          value={searchQuery}
+          onChange={event => setSearchQuery(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && searchQuery.trim()) navigate(`/library?q=${encodeURIComponent(searchQuery.trim())}`) }}
           placeholder="Поиск музыки…"
           aria-label="Поиск музыки"
           className="h-11 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] pl-11 pr-4 text-base text-[var(--r-text)] outline-none transition-colors placeholder:text-[var(--r-text-mute)] hover:border-[var(--r-line-2)] focus:border-[color:rgb(var(--r-accent-rgb)/0.65)] focus:bg-[var(--r-panel-2)] md:text-[0.9rem]"
@@ -339,57 +344,33 @@ function PlayingBars({ active }: { active: boolean }) {
 }
 
 function PlayerBar({ compact = false }: { compact?: boolean }) {
-  const [playing, setPlaying] = useState(true)
-  const [volume, setVolume] = useState(72)
-  const [muted, setMuted] = useState(false)
-  const [shuffle, setShuffle] = useState(false)
-  const [repeat, setRepeat] = useState(false)
-
+  const {
+    currentTrack, isPlaying, togglePlay, next, previous, currentTime, duration,
+    volume, setVolume, shuffle, toggleShuffle, repeat, cycleRepeat, seek,
+  } = usePlayer()
   const circleBtn =
     'grid place-items-center rounded-full text-[var(--r-text-dim)] transition-colors hover:bg-[var(--r-panel-2)] hover:text-[var(--r-text)]'
+  const title = currentTrack?.title || 'Выберите трек'
+  const artist = currentTrack?.artist || 'Библиотека Resonance'
+  const cover = currentTrack ? `/api/cover/${encodeURIComponent(currentTrack.id)}` : '/icon-192.svg'
 
   if (compact) {
     return (
       <div className="flex items-center gap-3 px-3 py-2">
         <Link to="/player" className="flex min-w-0 flex-1 items-center gap-2.5">
-          <img
-            src={nowPlaying.cover}
-            alt="Обложка трека"
-            className="h-10 w-10 flex-none rounded-lg object-cover"
-          />
+          <img src={cover} alt="Обложка трека" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} className="h-10 w-10 flex-none rounded-lg object-cover" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
-              <PlayingBars active={playing} />
-              <span className="truncate text-[0.82rem] font-medium leading-tight">
-                {nowPlaying.title}
-              </span>
+              <PlayingBars active={isPlaying} />
+              <span className="truncate text-[0.82rem] font-medium leading-tight">{title}</span>
             </span>
-            <span className="t-mute block truncate text-[0.68rem]">{nowPlaying.artist}</span>
+            <span className="t-mute block truncate text-[0.68rem]">{artist}</span>
           </span>
         </Link>
-        <button
-          type="button"
-          onClick={() => setPlaying((value) => !value)}
-          aria-label={playing ? 'Пауза' : 'Слушать'}
-          className={`accent-btn grid h-9 w-9 place-items-center rounded-full ${
-            playing ? 'playing-glow' : ''
-          }`}
-        >
-          <span key={playing ? 'pause' : 'play'} className="pop grid place-items-center">
-            {playing ? (
-              <Pause size={15} fill="currentColor" />
-            ) : (
-              <Play size={15} fill="currentColor" />
-            )}
-          </span>
+        <button type="button" onClick={() => void togglePlay()} disabled={!currentTrack} aria-label={isPlaying ? 'Пауза' : 'Слушать'} className={`accent-btn grid h-9 w-9 place-items-center rounded-full ${isPlaying ? 'playing-glow' : ''} disabled:opacity-40`}>
+          {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
         </button>
-        <Link
-          to="/player"
-          aria-label="Открыть плеер"
-          className="grid h-9 w-9 place-items-center text-[var(--r-text-dim)]"
-        >
-          <ListMusic size={17} />
-        </Link>
+        <Link to="/player" aria-label="Открыть плеер" className="grid h-9 w-9 place-items-center text-[var(--r-text-dim)]"><ListMusic size={17} /></Link>
       </div>
     )
   }
@@ -398,104 +379,40 @@ function PlayerBar({ compact = false }: { compact?: boolean }) {
     <div className="shrink-0 border-t border-[var(--r-line)]">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 px-4 py-4 md:px-6">
         <Link to="/player" className="group flex min-w-0 items-center gap-3">
-          <img
-            src={nowPlaying.cover}
-            alt="Обложка трека"
-            className="h-[3.25rem] w-[3.25rem] flex-none rounded-xl object-cover shadow-[0_10px_24px_-12px_rgba(0,0,0,0.9)]"
-          />
+          <img src={cover} alt="Обложка трека" className="h-[3.25rem] w-[3.25rem] flex-none rounded-xl object-cover shadow-[0_10px_24px_-12px_rgba(0,0,0,0.9)]" />
           <span className="min-w-0">
             <span className="flex items-center gap-2">
-              <PlayingBars active={playing} />
-              <span className="truncate text-[0.86rem] font-medium leading-tight transition-colors group-hover:text-[var(--r-accent)]">
-                {nowPlaying.title}
-              </span>
+              <PlayingBars active={isPlaying} />
+              <span className="truncate text-[0.86rem] font-medium leading-tight transition-colors group-hover:text-[var(--r-accent)]">{title}</span>
             </span>
-            <span className="t-mute block truncate text-[0.72rem]">{nowPlaying.artist}</span>
+            <span className="t-mute block truncate text-[0.72rem]">{artist}</span>
           </span>
         </Link>
 
-        <div className="flex items-center gap-1.5 md:gap-2.5">
-          <button
-            type="button"
-            onClick={() => setShuffle((value) => !value)}
-            aria-pressed={shuffle}
-            aria-label="Перемешать"
-            className={`${circleBtn} h-9 w-9 ${shuffle ? 'text-[var(--r-accent)]' : ''}`}
-          >
-            <Shuffle size={16} />
-          </button>
-          <button type="button" aria-label="Предыдущий трек" className={`${circleBtn} h-9 w-9`}>
-            <SkipBack size={17} fill="currentColor" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setPlaying((value) => !value)}
-            aria-label={playing ? 'Пауза' : 'Слушать'}
-            className={`accent-btn grid h-12 w-12 place-items-center rounded-full transition-transform hover:scale-105 ${
-              playing ? 'playing-glow' : ''
-            }`}
-          >
-            <span key={playing ? 'pause' : 'play'} className="pop grid place-items-center">
-              {playing ? (
-                <Pause size={18} fill="currentColor" />
-              ) : (
-                <Play size={18} fill="currentColor" className="ml-0.5" />
-              )}
-            </span>
-          </button>
-          <button type="button" aria-label="Следующий трек" className={`${circleBtn} h-9 w-9`}>
-            <SkipForward size={17} fill="currentColor" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRepeat((value) => !value)}
-            aria-pressed={repeat}
-            aria-label="Повтор"
-            className={`${circleBtn} h-9 w-9 ${repeat ? 'text-[var(--r-accent)]' : ''}`}
-          >
-            <Repeat size={16} />
-          </button>
-          <span className="ml-1 hidden text-[0.7rem] tabular-nums text-[var(--r-text-mute)] xl:inline">
-            {nowPlaying.elapsed} / {nowPlaying.duration}
-          </span>
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-1.5 md:gap-2.5">
+            <button type="button" onClick={toggleShuffle} aria-pressed={shuffle} aria-label="Перемешать" className={`${circleBtn} h-9 w-9 ${shuffle ? 'text-[var(--r-accent)]' : ''}`}><Shuffle size={16} /></button>
+            <button type="button" onClick={() => void previous()} aria-label="Предыдущий трек" className={`${circleBtn} h-9 w-9`}><SkipBack size={17} fill="currentColor" /></button>
+            <button type="button" onClick={() => void togglePlay()} disabled={!currentTrack} aria-label={isPlaying ? 'Пауза' : 'Слушать'} className={`accent-btn grid h-12 w-12 place-items-center rounded-full transition-transform hover:scale-105 disabled:opacity-40 ${isPlaying ? 'playing-glow' : ''}`}>
+              {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+            </button>
+            <button type="button" onClick={() => void next()} aria-label="Следующий трек" className={`${circleBtn} h-9 w-9`}><SkipForward size={17} fill="currentColor" /></button>
+            <button type="button" onClick={cycleRepeat} aria-pressed={repeat !== 'off'} aria-label={`Повтор: ${repeat}`} className={`${circleBtn} h-9 w-9 ${repeat !== 'off' ? 'text-[var(--r-accent)]' : ''}`}><Repeat size={16} /></button>
+          </div>
+          <div className="flex w-full max-w-[22rem] items-center gap-2">
+            <span className="t-mute text-[0.64rem] tabular-nums">{formatTime(currentTime)}</span>
+            <input type="range" min={0} max={Math.max(1, duration)} step={0.1} value={Math.min(currentTime, duration || 0)} aria-label="Позиция воспроизведения" disabled={!currentTrack} onChange={event => {
+              seek(Number(event.target.value))
+            }} className="r-range min-w-0 flex-1" style={{ ['--_p' as string]: `${duration ? currentTime / duration * 100 : 0}%` } as CSSProperties} />
+            <span className="t-mute text-[0.64rem] tabular-nums">{formatTime(duration)}</span>
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMuted((value) => !value)}
-            aria-label={muted ? 'Включить звук' : 'Выключить звук'}
-            className={`${circleBtn} h-9 w-9`}
-          >
-            {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={muted ? 0 : volume}
-            aria-label="Громкость"
-            onChange={(event) => {
-              setVolume(Number(event.target.value))
-              setMuted(false)
-            }}
-            className="r-range hidden w-[6.5rem] md:block"
-            style={{ ['--_p' as string]: `${muted ? 0 : volume}%` } as CSSProperties}
-          />
-          <button
-            type="button"
-            aria-label="Эквалайзер"
-            className={`${circleBtn} hidden h-9 w-9 xl:grid`}
-          >
-            <AudioLines size={16} />
-          </button>
-          <Link
-            to="/player"
-            aria-label="Открыть полноэкранный плеер"
-            className={`${circleBtn} hidden h-9 w-9 xl:grid`}
-          >
-            <Maximize2 size={16} />
-          </Link>
+          <Volume2 size={16} className="text-[var(--r-text-dim)]" />
+          <input type="range" min={0} max={100} value={Math.round(volume * 100)} aria-label="Громкость" onChange={event => setVolume(Number(event.target.value) / 100)} className="r-range hidden w-[6.5rem] md:block" style={{ ['--_p' as string]: `${volume * 100}%` } as CSSProperties} />
+          <Link to="/settings" aria-label="Настройки звука" className={`${circleBtn} hidden h-9 w-9 xl:grid`}><AudioLines size={16} /></Link>
+          <Link to="/player" aria-label="Открыть полноэкранный плеер" className={`${circleBtn} hidden h-9 w-9 xl:grid`}><Maximize2 size={16} /></Link>
         </div>
       </div>
     </div>
