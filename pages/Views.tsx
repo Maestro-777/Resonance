@@ -570,7 +570,7 @@ export function Artists() {
       <PageHead title="Исполнители" subtitle={connected ? `${list.length} исполнителей в вашей коллекции` : 'Все артисты вашей коллекции'} />
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
         {list.map(artist => (
-          <Link key={artist.id} to="/albums" className="group block text-center">
+          <Link key={artist.id} to={connected ? `/artists/${artist.id}` : "/albums"} className="group block text-center">
             <div className="mx-auto aspect-square w-full overflow-hidden rounded-full border border-[var(--r-line)] transition-transform duration-500 group-hover:scale-[1.03]">
               <img src={artist.cover} alt={artist.name} loading="lazy" onError={event => { event.currentTarget.src = covers.mountains }} className="h-full w-full object-cover" />
             </div>
@@ -579,6 +579,20 @@ export function Artists() {
           </Link>
         ))}
       </div>
+    </div>
+  )
+}
+
+export function ArtistDetail() {
+  const { id } = useParams()
+  const { tracks, connected } = usePlayer()
+  const items = tracks.filter(track => makeSlug(track.albumArtist || track.artist) === id)
+  const name = items[0]?.albumArtist || items[0]?.artist || artists.find(item => item.id === id)?.name || 'Исполнитель'
+  return (
+    <div className="fade-up">
+      <Link to="/artists" className="t-dim mb-5 inline-flex items-center gap-1.5 text-[0.8rem] font-medium hover:text-[var(--r-text)]"><ArrowLeft size={15} />Исполнители</Link>
+      <PageHead title={name} subtitle={connected ? `${items.length} треков в библиотеке` : 'Исполнитель'} />
+      {items.length ? <ServerTrackRows items={items} /> : <p className="t-dim">Треки этого исполнителя пока не найдены.</p>}
     </div>
   )
 }
