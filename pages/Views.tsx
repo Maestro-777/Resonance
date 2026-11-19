@@ -25,19 +25,11 @@ import {
   X,
 } from 'lucide-react'
 import {
-  albums,
-  artists,
   covers,
-  heroSlides,
   libraryFilters,
-  nowPlaying,
-  playlists,
-  recentlyPlayed,
-  type Album,
-  type Track,
 } from '@/data'
 import { AppearanceControls, useAppearance } from '@/theme'
-import { Cover, LibraryTiles, SectionHeader } from '@/components/Shell'
+import { Cover, SectionHeader } from '@/components/Shell'
 import { formatTime, usePlayer, type LibraryTrack } from '@/player/PlayerContext'
 import { deleteOfflineTrack, listOfflineTracks, saveOfflineTrack, type OfflineTrackRecord } from '@/lib/offline'
 
@@ -112,107 +104,6 @@ function durationMinutes(tracks: Track[]) {
     return total + minutes * 60 + secs
   }, 0)
   return Math.round(seconds / 60)
-}
-
-function TrackList({
-  items,
-  activeIndex = 1,
-  withCover = false,
-  showArtist = true,
-}: {
-  items: { title: string; artist?: string; duration: string; cover: string }[]
-  activeIndex?: number
-  withCover?: boolean
-  showArtist?: boolean
-}) {
-  const [liked, setLiked] = useState<number[]>([])
-  const toggleLike = (index: number) =>
-    setLiked((prev) => (prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]))
-
-  return (
-    <div className="overflow-hidden">
-      {items.map((item, index) => {
-        const active = index === activeIndex
-        return (
-          <div
-            key={`${item.title}-${index}`}
-            className={`group grid items-center gap-3 rounded-[calc(var(--r-radius)*0.7)] px-2.5 py-2.5 transition-colors md:px-3 ${
-              withCover
-                ? 'grid-cols-[1.6rem_2.4rem_minmax(0,1fr)_auto_auto_auto]'
-                : 'grid-cols-[1.6rem_minmax(0,1fr)_auto_auto_auto]'
-            } ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}
-          >
-            <span
-              className={`text-center text-[0.76rem] tabular-nums ${
-                active ? 'accent-text' : 't-mute'
-              }`}
-            >
-              {active ? (
-                <span className="inline-flex h-3 items-end gap-[2px]" aria-label="Играет">
-                  <span className="eq-bar accent-grad h-full w-[2px] rounded-full" />
-                  <span
-                    className="eq-bar accent-grad h-full w-[2px] rounded-full"
-                    style={{ animationDelay: '0.2s' }}
-                  />
-                  <span
-                    className="eq-bar accent-grad h-full w-[2px] rounded-full"
-                    style={{ animationDelay: '0.4s' }}
-                  />
-                </span>
-              ) : (
-                index + 1
-              )}
-            </span>
-
-            {withCover ? (
-              <img
-                src={item.cover}
-                alt=""
-                className="h-9 w-9 rounded-lg object-cover"
-                loading="lazy"
-              />
-            ) : null}
-
-            <div className="min-w-0">
-              <p
-                className={`truncate text-[0.86rem] font-medium ${
-                  active ? 'accent-text' : 'text-[var(--r-text)]'
-                }`}
-              >
-                {item.title}
-              </p>
-              {showArtist && item.artist ? (
-                <p className="t-mute truncate text-[0.72rem]">{item.artist}</p>
-              ) : null}
-            </div>
-
-            <span className="t-mute text-[0.75rem] tabular-nums">{item.duration}</span>
-
-            <button
-              type="button"
-              onClick={() => toggleLike(index)}
-              aria-label={liked.includes(index) ? 'Убрать из избранного' : 'В избранное'}
-              aria-pressed={liked.includes(index)}
-              className={`grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-[var(--r-panel-2)] ${
-                liked.includes(index)
-                  ? 'text-[var(--r-accent)]'
-                  : 'text-[var(--r-text-mute)] opacity-0 group-hover:opacity-100'
-              }`}
-            >
-              <Heart size={15} fill={liked.includes(index) ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              type="button"
-              aria-label={`Ещё: ${item.title}`}
-              className="grid h-8 w-8 place-items-center rounded-full text-[var(--r-text-mute)] transition-colors hover:bg-[var(--r-panel-2)] hover:text-[var(--r-text)]"
-            >
-              <MoreHorizontal size={15} />
-            </button>
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
@@ -453,7 +344,7 @@ export function ArtistDetail() {
   const { id } = useParams()
   const { tracks, connected } = usePlayer()
   const items = tracks.filter(track => makeSlug(track.albumArtist || track.artist) === id)
-  const name = items[0]?.albumArtist || items[0]?.artist || 'Исполнитель no encontrado'
+  const name = items[0]?.albumArtist || items[0]?.artist || 'Исполнитель'
   return (
     <div className="fade-up">
       <Link to="/artists" className="t-dim mb-5 inline-flex items-center gap-1.5 text-[0.8rem] font-medium hover:text-[var(--r-text)]"><ArrowLeft size={15} />Исполнители</Link>
@@ -515,19 +406,7 @@ export function Playlists() {
           </div>
         </section>
       ) : null}
-      <h2 className="mb-4 text-base font-semibold">Подборки Resonance</h2>
-      <div className="media-grid">
-        {playlists.map(playlist => (
-          <Link key={playlist.id} to="/player" className="cover-wrap group block">
-            <div className="cover-art aspect-square">
-              {playlist.cover ? <img src={playlist.cover} alt={playlist.title} loading="lazy" /> : <div className="flex h-full w-full items-center justify-center" style={{ background: playlist.gradient }}><Star size={40} className="text-white/90" fill="currentColor" /></div>}
-              <span className="cover-play" aria-hidden="true"><Play size={13} fill="currentColor" /></span>
-            </div>
-            <p className="mt-2.5 truncate text-[0.86rem] font-medium">{playlist.title}</p>
-            <p className="t-mute truncate text-[0.74rem]">{playlist.count}</p>
-          </Link>
-        ))}
-      </div>
+
     </div>
   )
 }
@@ -535,10 +414,6 @@ export function Playlists() {
 /* ================================================================== */
 /*  Избранное / История / Офлайн                                       */
 /* ================================================================== */
-
-const flatTracks = albums.flatMap((album) =>
-  album.tracks.map((track) => ({ ...track, artist: album.artist })),
-)
 
 export function Favorites() {
   const { tracks, favorites, playTrack } = usePlayer()
@@ -785,6 +660,7 @@ export function Settings() {
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
+  const [serverHealth, setServerHealth] = useState<{ musicRoot?: string; trackCount?: number; lastScan?: string | null } | null>(null)
 
   const loadMetadataBackups = async () => {
     if (!connected || !accessKey) return
@@ -797,6 +673,15 @@ export function Settings() {
       setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки резервных копий')
     }
   }
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/health', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(value => { if (active) setServerHealth(value) })
+      .catch(() => { if (active) setServerHealth(null) })
+    return () => { active = false }
+  }, [connected, loading]) 
 
   useEffect(() => {
     void loadMetadataBackups()
@@ -893,13 +778,14 @@ export function Settings() {
               <h2 className="text-base font-semibold">Музыкальный сервер</h2>
               <span className={`rounded-full px-2.5 py-1 text-[0.68rem] ${connected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--r-panel-2)] t-dim'}`}>{connected ? 'Подключён' : 'Не подключён'}</span>
             </div>
-            <p className="t-dim mt-1 text-sm">Сервер читает вашу папку с музыкой на компьютере. Введите ключ из server/.env, чтобы загрузить библиотеку.</p>
-            {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} треков доступны для воспроизведения</p> : null}
+            <p className="t-dim mt-1 text-sm">Сервер читает реальные аудиофайлы с компьютера. Ключ находится в файле <code>server/.env</code>; в Windows его можно открыть кнопкой «Где взять ключ?» ниже.</p>
+            {serverHealth?.musicRoot ? <p className="t-mute mt-2 break-all text-xs">Папка музыки: {serverHealth.musicRoot}</p> : null}
+            {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} реальных треков загружено в библиотеку</p> : null}
           </div>
           {connected ? (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={disconnect} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">Отключить сервер</button>
-              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Обновление…' : 'Обновить мои треки'}</button>
+              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage(`Готово. Найдено треков: ${tracks.length}.`)).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование папки…' : 'Обновить мои треки'}</button>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
                 {uploading ? 'Загрузка…' : 'Загрузить музыку'}
                 <input type="file" accept="audio/*,.flac,.opus,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
@@ -920,12 +806,14 @@ export function Settings() {
             </div>
           ) : null}
         </div>
+        {!connected ? <div className="mt-3"><a href="file:///C:/not-a-real-path" className="hidden" aria-hidden="true">.</a><p className="text-xs t-mute">Открой файл server/.env в папке Resonance на компьютере. Нужна строка RESONANCE_ACCESS_KEY=…</p></div> : null}
         {!connected ? (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input type="password" autoComplete="current-password" value={serverKey} onChange={event => setServerKey(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) } }} placeholder="Ключ доступа Resonance" aria-label="Ключ доступа сервера" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
             <button type="button" disabled={!serverKey.trim() || loading} onClick={() => { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) }} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">Подключить</button>
           </div>
         ) : null}
+        {!connected ? <p className="mt-3 text-xs t-mute">После установки нажми «Где взять ключ?», скопируй значение RESONANCE_ACCESS_KEY из server/.env, вставь его сюда и нажми «Подключить».</p> : null}
         {serverMessage || error ? <p role="status" className="mt-3 text-sm text-[var(--r-text-dim)]">{serverMessage || error}</p> : null}
         {accessKey && !connected ? <p className="t-mute mt-2 text-xs">Ключ сохранён в этом браузере. Проверьте, что сервер запущен на этом компьютере.</p> : null}
       </section>
