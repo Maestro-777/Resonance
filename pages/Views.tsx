@@ -873,10 +873,11 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds, exportData, importData } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [backupMessage, setBackupMessage] = useState('')
   const [editTrackId, setEditTrackId] = useState('')
   const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
   const [metadataMessage, setMetadataMessage] = useState('')
@@ -1062,6 +1063,35 @@ export function Settings() {
               <span className="t-mute text-[0.65rem]">{Number(frequency) >= 1000 ? `${Number(frequency) / 1000}k` : frequency}</span>
             </label>
           ))}
+        </div>
+      </section>
+
+      <section className="panel mb-5 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
+        <div>
+          <h2 className="text-base font-semibold">Резервная копия коллекции</h2>
+          <p className="t-dim mt-1 text-sm">Экспорт и импорт избранного, плейлистов, истории, очереди и настроек звука. Аудиофайлы не включаются.</p>
+          {backupMessage ? <p role="status" className="mt-2 text-xs t-dim">{backupMessage}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => {
+            const blob = new Blob([exportData()], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `resonance-backup-${new Date().toISOString().slice(0, 10)}.json`
+            link.click()
+            URL.revokeObjectURL(url)
+            setBackupMessage('Резервная копия подготовлена.')
+          }} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">Экспортировать JSON</button>
+          <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
+            Импортировать JSON
+            <input type="file" accept="application/json,.json" className="sr-only" onChange={event => {
+              const file = event.target.files?.[0]
+              if (!file) return
+              void file.text().then(importData).then(() => setBackupMessage('Данные восстановлены.')).catch(cause => setBackupMessage(cause instanceof Error ? cause.message : 'Не удалось импортировать файл.'))
+              event.target.value = ''
+            }} />
+          </label>
         </div>
       </section>
 
