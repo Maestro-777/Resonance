@@ -855,9 +855,10 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, loading, tracks, error } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
+  const [uploading, setUploading] = useState(false)
 
   return (
     <div className="fade-up">
@@ -885,7 +886,26 @@ export function Settings() {
             {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} треков доступны для воспроизведения</p> : null}
           </div>
           {connected ? (
-            <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование…' : 'Сканировать папку'}</button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование…' : 'Сканировать папку'}</button>
+              <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
+                {uploading ? 'Загрузка…' : 'Загрузить музыку'}
+                <input type="file" accept="audio/*,.flac,.opus,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
+                  const files = event.target.files
+                  if (!files?.length) return
+                  const body = new FormData()
+                  Array.from(files).forEach(file => body.append('files', file))
+                  setUploading(true)
+                  setServerMessage('')
+                  void fetch('/api/uploads', { method: 'POST', headers: { 'x-resonance-key': accessKey }, body }).then(async response => {
+                    const result = await response.json()
+                    if (!response.ok) throw new Error(result.error || 'Не удалось загрузить файлы')
+                    return refreshLibrary().then(() => setServerMessage(`Загружено файлов: ${result.uploaded}`))
+                  }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки')).finally(() => setUploading(false))
+                  event.target.value = ''
+                }} />
+              </label>
+            </div>
           ) : null}
         </div>
         {!connected ? (
