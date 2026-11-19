@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AudioLines,
   Bell,
@@ -244,6 +244,8 @@ const themeOrder: ThemeId[] = ['night', 'amethyst', 'graphite', 'oled']
 
 function Topbar() {
   const { appearance, update, setPanelOpen } = useAppearance()
+  const navigate = useNavigate()
+  const [searchQuery, setSearchQuery] = useState('')
 
   const cycleTheme = () => {
     const index = themeOrder.indexOf(appearance.theme)
@@ -273,6 +275,9 @@ function Topbar() {
         />
         <input
           type="search"
+          value={searchQuery}
+          onChange={event => setSearchQuery(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && searchQuery.trim()) navigate(`/library?q=${encodeURIComponent(searchQuery.trim())}`) }}
           placeholder="Поиск музыки…"
           aria-label="Поиск музыки"
           className="h-11 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] pl-11 pr-4 text-base text-[var(--r-text)] outline-none transition-colors placeholder:text-[var(--r-text-mute)] hover:border-[var(--r-line-2)] focus:border-[color:rgb(var(--r-accent-rgb)/0.65)] focus:bg-[var(--r-panel-2)] md:text-[0.9rem]"
