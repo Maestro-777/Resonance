@@ -275,7 +275,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!sleepTimer) return
     const timer = window.setTimeout(() => {
+      if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current)
+      transitionTimerRef.current = null
+      crossfadeActiveRef.current = false
       audioRef.current?.pause()
+      secondaryAudioRef.current?.pause()
       setIsPlaying(false)
       setSleepTimerState(null)
     }, Math.max(0, sleepTimer - Date.now()))
@@ -412,6 +416,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current)
     transitionTimerRef.current = null
     crossfadeActiveRef.current = false
+    preloadedTrackIdRef.current = ''
     const standby = secondaryAudioRef.current
     standby?.pause()
     if (deckGainRef.current && audioContextRef.current) deckGainRef.current.gain.setValueAtTime(1, audioContextRef.current.currentTime)
