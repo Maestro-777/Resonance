@@ -122,7 +122,7 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
         const active = currentTrack?.id === track.id
         const liked = favorites.includes(track.id)
         return (
-          <div key={track.id} className={`group grid grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}>
+          <div key={track.id} className={`group grid grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto] items-center sm:grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto_auto_auto] gap-3 rounded-xl px-2 py-2 transition-colors ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}>
             <span className="t-mute text-center text-xs tabular-nums">{active && isPlaying ? <AudioLines size={15} className="mx-auto accent-text" /> : index + 1}</span>
             <img src={`/api/cover/${encodeURIComponent(track.id)}`} onError={event => { event.currentTarget.style.visibility = 'hidden' }} alt="" className="h-10 w-10 rounded-lg bg-[var(--r-panel-2)] object-cover" />
             <button type="button" onClick={() => active ? void togglePlay() : void playTrack(track)} className="min-w-0 text-left">
@@ -132,7 +132,7 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
             <span className="t-mute hidden text-xs tabular-nums sm:block">{formatTime(track.duration)}</span>
             <button type="button" onClick={() => toggleFavorite(track.id)} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} aria-pressed={liked} className={`grid h-8 w-8 place-items-center rounded-full hover:bg-[var(--r-panel-2)] ${liked ? 'text-[var(--r-accent)]' : 't-mute'}`}><Heart size={15} fill={liked ? 'currentColor' : 'none'} /></button>
             <Link to={`/tracks/${encodeURIComponent(track.id)}/edit`} aria-label={`Редактировать ${track.title}`} title="Редактировать трек" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] hover:accent-text"><Pencil size={15} /></Link>
-            <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)]"><Plus size={16} /></button>
+            <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="hidden h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] sm:grid"><Plus size={16} /></button>
           </div>
         )
       })}
