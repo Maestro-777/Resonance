@@ -1,3 +1,4 @@
+import { useAppearance, type Appearance } from '@/theme'
 import {
   createContext,
   useCallback,
@@ -30,7 +31,7 @@ type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
 type PlaybackSnapshot = { trackId: string; position: number; updatedAt?: string | null }
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
-type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number } }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number }; appearance?: Partial<Appearance> }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -130,6 +131,7 @@ async function request<T>(path: string, init: RequestInit = {}, key = ''): Promi
 }
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
+  const { appearance, update: updateAppearance } = useAppearance()
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -334,6 +336,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     request<SyncState>('/api/sync', {}, accessKey).then(remote => {
       if (!active) return
       if (remote.playback) setSavedPlayback(current => !current || (remote.playback!.updatedAt || '') > (current.updatedAt || '') ? remote.playback! : current)
+      if (remote.appearance) {
+        for (const [key, value] of Object.entries(remote.appearance)) updateAppearance(key as keyof Appearance, value as never)
+      }
       if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
       if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
       if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
@@ -361,11 +366,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => {
       void request('/api/sync', {
         method: 'PUT',
-        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists, equalizer: { eq: equalizer, eqPreset: equalizerPreset }, preferences: { crossfadeSeconds } }),
+        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists, equalizer: { eq: equalizer, eqPreset: equalizerPreset }, preferences: { crossfadeSeconds }, appearance }),
       }, accessKey).catch(() => setError('Синхронизация временно недоступна. Изменения сохранены на этом устройстве.'))
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
+  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds, appearance])
 
   useEffect(() => {
     if (!connected || !accessKey || !savedPlayback) return
@@ -402,6 +407,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       equalizer,
       equalizerPreset,
       crossfadeSeconds,
+      appearance,
     }, null, 2)
   }
 
@@ -442,6 +448,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     if (typeof data.equalizerPreset === 'string') setEqualizerPreset(data.equalizerPreset.slice(0, 40))
     if (typeof data.crossfadeSeconds === 'number') setCrossfadeSecondsState(Math.max(0, Math.min(8, data.crossfadeSeconds)))
+    if (data.appearance && typeof data.appearance === 'object') {
+      const source = data.appearance as Record<string, unknown>
+      if (['night', 'amethyst', 'graphite', 'oled'].includes(String(source.theme))) updateAppearance('theme', source.theme as Appearance['theme'])
+      if (typeof source.accent === 'string' && /^#[0-9a-f]{6}$/i.test(source.accent)) updateAppearance('accent', source.accent)
+      if (['comfortable', 'compact'].includes(String(source.density))) updateAppearance('density', source.density as Appearance['density'])
+      for (const key of ['glow', 'animations', 'labels'] as const) if (typeof source[key] === 'boolean') updateAppearance(key, source[key] as boolean)
+      if (typeof source.radius === 'number') updateAppearance('radius', Math.max(4, Math.min(28, source.radius)))
+      if (typeof source.blur === 'number') updateAppearance('blur', Math.max(0, Math.min(30, source.blur)))
+      if (typeof source.scale === 'number') updateAppearance('scale', Math.max(0.85, Math.min(1.2, source.scale)))
+      if (typeof source.cols === 'number') updateAppearance('cols', Math.max(2, Math.min(8, source.cols)))
+    }
   }
 
   const activateAudioGraph = useCallback(async () => {
@@ -895,7 +912,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, appearance, updateAppearance])
 
   return (
     <PlayerContext.Provider value={value}>
