@@ -176,6 +176,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true)
     try {
+      await request<{ ok: boolean }>('/api/auth/session', { method: 'POST' }, accessKey)
       const result = await request<LibraryResponse>('/api/library', {}, accessKey)
       setTracks(result.tracks || [])
       setConnected(true)
