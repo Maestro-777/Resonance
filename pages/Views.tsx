@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlignLeft,
   AudioLines,
@@ -399,7 +399,9 @@ export function Library() {
   const [filter, setFilter] = useState<string>(libraryFilters[0])
   const [sort, setSort] = useState('default')
   const { tracks, connected } = usePlayer()
-  const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState(() => searchParams.get('q') || '')
+  useEffect(() => { setQuery(searchParams.get('q') || '') }, [searchParams])
   const serverTracks = tracks.filter(track => [track.title, track.artist, track.album].some(value => value.toLowerCase().includes(query.toLowerCase()))).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'new' ? (b.year ?? 0) - (a.year ?? 0) : a.artist.localeCompare(b.artist))
 
   return (
