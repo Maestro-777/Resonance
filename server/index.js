@@ -388,6 +388,7 @@ async function fetchRemoteAudio(inputUrl) {
 app.post('/api/import-url', async (req, res) => {
   if (typeof req.body?.url !== 'string' || req.body.url.length > 4096) return res.status(400).json({ error: 'Укажи прямую ссылку на аудиофайл.' })
   let tempPath = ''
+  let savedPath = ''
   try {
     const { response, originalName } = await fetchRemoteAudio(req.body.url.trim())
     await fs.mkdir(UPLOAD_DIR, { recursive: true })
@@ -405,12 +406,15 @@ app.post('/api/import-url', async (req, res) => {
     if (!received) throw new Error('Скачанный файл пуст.')
     await fs.rename(tempPath, finalPath)
     tempPath = ''
+    savedPath = finalPath
     const library = await scanLibrary()
     const track = library.find(item => item.relativePath === path.relative(MUSIC_ROOT, finalPath))
     if (!track) throw new Error('Файл скачан, но не удалось прочитать его аудиометаданные.')
+    savedPath = ''
     res.status(201).json({ ok: true, track, trackCount: library.length, filename })
   } catch (error) {
     if (tempPath) await fs.rm(tempPath, { force: true }).catch(() => {})
+    if (savedPath) await fs.rm(savedPath, { force: true }).catch(() => {})
     res.status(400).json({ error: error.message || 'Не удалось скачать аудиофайл по ссылке.' })
   }
 })
