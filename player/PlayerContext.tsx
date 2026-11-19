@@ -54,6 +54,7 @@ type PlayerContextValue = {
   addTrackToPlaylist: (playlistId: string, trackId: string) => void
   updatePlaylist: (playlistId: string, patch: Partial<Pick<UserPlaylist, 'name' | 'cover' | 'description'>>) => void
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void
+  movePlaylistTrack: (playlistId: string, fromIndex: number, toIndex: number) => void
   deletePlaylist: (playlistId: string) => void
   loading: boolean
   error: string | null
@@ -962,12 +963,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
-    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist,
+    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist,
     loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, moveQueueItem, playPlaylist, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, moveQueueItem, playPlaylist, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, appearance, updateAppearance])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, moveQueueItem, playPlaylist, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, appearance, updateAppearance])
 
   return (
     <PlayerContext.Provider value={value}>
