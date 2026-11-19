@@ -86,6 +86,9 @@ const PLAYLISTS_KEY = 'resonance.playlists.v1'
 const EQ_KEY = 'resonance.equalizer.v1'
 const PLAYBACK_KEY = 'resonance.playback.v1'
 const CROSSFADE_KEY = 'resonance.crossfade.v1'
+const VOLUME_KEY = 'resonance.volume.v1'
+const SHUFFLE_KEY = 'resonance.shuffle.v1'
+const REPEAT_KEY = 'resonance.repeat.v1'
 const EQ_BANDS = ['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000']
 const ACCESS_KEY = 'resonance.accessKey'
 
@@ -142,9 +145,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [volume, setVolumeState] = useState(0.72)
-  const [shuffle, setShuffle] = useState(false)
-  const [repeat, setRepeat] = useState<RepeatMode>('off')
+  const [volume, setVolumeState] = useState(() => { const value = Number(localStorage.getItem(VOLUME_KEY)); return Number.isFinite(value) && localStorage.getItem(VOLUME_KEY) !== null ? Math.max(0, Math.min(1, value)) : 0.72 })
+  const [shuffle, setShuffle] = useState(() => localStorage.getItem(SHUFFLE_KEY) === 'true')
+  const [repeat, setRepeat] = useState<RepeatMode>(() => { const value = localStorage.getItem(REPEAT_KEY); return value === 'all' || value === 'one' ? value : 'off' })
   const [sleepTimer, setSleepTimerState] = useState<number | null>(null)
   const [crossfadeSeconds, setCrossfadeSecondsState] = useState(() => Math.max(0, Math.min(8, Number(localStorage.getItem(CROSSFADE_KEY) ?? 4) || 0)) )
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
@@ -247,6 +250,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(EQ_KEY, JSON.stringify(equalizer))
   }, [equalizer])
+
+  useEffect(() => {
+    localStorage.setItem(VOLUME_KEY, String(volume))
+  }, [volume])
+
+  useEffect(() => {
+    localStorage.setItem(SHUFFLE_KEY, String(shuffle))
+  }, [shuffle])
+
+  useEffect(() => {
+    localStorage.setItem(REPEAT_KEY, repeat)
+  }, [repeat])
 
   useEffect(() => {
     localStorage.setItem(CROSSFADE_KEY, String(crossfadeSeconds))
@@ -792,6 +807,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable)) return
+      if (event.code === 'Space') {
+        event.preventDefault()
+        void togglePlay()
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'ArrowRight') {
+        event.preventDefault()
+        void next()
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'ArrowLeft') {
+        event.preventDefault()
+        void previous()
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        seek(currentTime + 10)
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        seek(Math.max(0, currentTime - 10))
+      } else if (event.key.toLowerCase() === 'm') {
+        setVolume(volume > 0 ? 0 : 0.72)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [currentTime, next, previous, seek, setVolume, togglePlay, volume])
+
+  useEffect(() => {
     if (!currentTrack || !('mediaSession' in navigator)) return
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
@@ -799,6 +841,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       album: currentTrack.album,
       artwork: [{ src: `/api/cover/${encodeURIComponent(currentTrack.id)}`, sizes: '512x512', type: 'image/jpeg' }],
     })
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
     navigator.mediaSession.setActionHandler('play', () => void togglePlay())
     navigator.mediaSession.setActionHandler('pause', () => void togglePlay())
     navigator.mediaSession.setActionHandler('previoustrack', () => void previous())
@@ -806,7 +849,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     navigator.mediaSession.setActionHandler('seekto', details => {
       if (typeof details.seekTime === 'number') seek(details.seekTime)
     })
-  }, [currentTrack, next, previous, seek, togglePlay])
+  }, [currentTrack, isPlaying, next, previous, seek, togglePlay])
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
