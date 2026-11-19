@@ -28,8 +28,9 @@ export type LibraryTrack = {
 
 type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
+type PlaybackSnapshot = { trackId: string; position: number; updatedAt: string }
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
-type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number } }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number } }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -147,6 +148,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<LibraryTrack | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
+  const [savedPlayback, setSavedPlayback] = useState<PlaybackSnapshot | null>(() => { try { return JSON.parse(localStorage.getItem(PLAYBACK_KEY) || 'null') as PlaybackSnapshot | null } catch { return null } })
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => { const value = Number(localStorage.getItem(VOLUME_KEY)); return Number.isFinite(value) && localStorage.getItem(VOLUME_KEY) !== null ? Math.max(0, Math.min(1, value)) : 0.72 })
   const [shuffle, setShuffle] = useState(() => localStorage.getItem(SHUFFLE_KEY) === 'true')
@@ -271,31 +273,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [crossfadeSeconds])
 
   useEffect(() => {
-    if (currentTrack) localStorage.setItem(PLAYBACK_KEY, JSON.stringify({ trackId: currentTrack.id, position: currentTime }))
+    if (savedPlayback) localStorage.setItem(PLAYBACK_KEY, JSON.stringify(savedPlayback))
+  }, [savedPlayback])
+
+  useEffect(() => {
+    if (currentTrack) setSavedPlayback({ trackId: currentTrack.id, position: currentTime, updatedAt: new Date().toISOString() })
   }, [currentTrack, currentTime])
 
   useEffect(() => {
-    if (!tracks.length || restoredPlaybackRef.current) return
-    try {
-      const saved = JSON.parse(localStorage.getItem(PLAYBACK_KEY) || 'null') as { trackId?: string; position?: number } | null
-      const track = saved?.trackId ? tracks.find(item => item.id === saved.trackId) : undefined
-      if (!track) return
-      restoredPlaybackRef.current = true
-      const position = Number.isFinite(saved?.position) ? Math.max(0, saved!.position!) : 0
-      setCurrentTrack(track)
-      setCurrentTime(position)
-      setDuration(track.duration || 0)
-      const audio = audioRef.current
-      if (audio) {
-        audio.src = `/api/stream/${encodeURIComponent(track.id)}`
-        audio.addEventListener('loadedmetadata', () => {
-          audio.currentTime = Math.min(position, audio.duration || position)
-          setCurrentTime(audio.currentTime)
-        }, { once: true })
-        audio.load()
-      }
-    } catch { /* ignore a malformed local playback snapshot */ }
-  }, [tracks])
+    if (!tracks.length || restoredPlaybackRef.current || !savedPlayback) return
+    const track = tracks.find(item => item.id === savedPlayback.trackId)
+    if (!track) return
+    restoredPlaybackRef.current = true
+    const position = Math.max(0, savedPlayback.position || 0)
+    setCurrentTrack(track)
+    setCurrentTime(position)
+    setDuration(track.duration || 0)
+    const audio = audioRef.current
+    if (audio) {
+      audio.src = `/api/stream/${encodeURIComponent(track.id)}`
+      audio.addEventListener('loadedmetadata', () => {
+        audio.currentTime = Math.min(position, audio.duration || position)
+        setCurrentTime(audio.currentTime)
+      }, { once: true })
+      audio.load()
+    }
+  }, [tracks, savedPlayback])
 
   const setSleepTimer = useCallback((minutes: number | null) => {
     setSleepTimerState(minutes && minutes > 0 ? Date.now() + minutes * 60_000 : null)
@@ -330,6 +333,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setSyncLoaded(false)
     request<SyncState>('/api/sync', {}, accessKey).then(remote => {
       if (!active) return
+      if (remote.playback) setSavedPlayback(current => !current || (remote.playback!.updatedAt || '') > (current.updatedAt || '') ? remote.playback! : current)
       if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
       if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
       if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
@@ -362,6 +366,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }, 700)
     return () => window.clearTimeout(timer)
   }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
+
+  useEffect(() => {
+    if (!connected || !accessKey || !savedPlayback) return
+    const timer = window.setTimeout(() => {
+      void request('/api/sync', {
+        method: 'PUT',
+        body: JSON.stringify({ playback: savedPlayback }),
+      }, accessKey).catch(() => {})
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [connected, accessKey, savedPlayback])
 
   const createPlaylist = useCallback((name: string) => {
     const clean = name.trim().slice(0, 120)
