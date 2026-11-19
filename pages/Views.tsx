@@ -90,6 +90,14 @@ function MediaCard({
   )
 }
 
+function parseLrc(content: string) {
+  return content.split(/\r?\n/).flatMap(line => {
+    const stamps = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)]
+    const text = line.replace(/\[\d+:(?:\d+(?:\.\d+)?)\]/g, '').trim()
+    return stamps.map(match => ({ time: Number(match[1]) * 60 + Number(match[2]), text })).filter(item => item.text)
+  }).sort((a, b) => a.time - b.time)
+}
+
 function makeSlug(value: string) {
   return value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '')
 }
@@ -782,6 +790,8 @@ export function Player() {
     return () => { active = false }
   }, [track?.id, accessKey])
   const progress = duration > 0 ? currentTime / duration : 0
+  const timedLyrics = lyrics ? parseLrc(lyrics) : []
+  const activeLyricIndex = timedLyrics.findIndex((line, index) => currentTime >= line.time && (index === timedLyrics.length - 1 || currentTime < timedLyrics[index + 1].time))
   const bars = Math.round(waveHeights.length * progress)
   const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
   const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : covers.mountains
@@ -834,7 +844,7 @@ export function Player() {
       )}
       {showLyrics && (
         <div className="relative mx-auto mb-3 max-h-40 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 text-left text-sm leading-relaxed text-white/85 backdrop-blur">
-          {lyrics ? <pre className="whitespace-pre-wrap font-sans">{lyrics}</pre> : <p className="text-white/60">Для этого трека текст песни не найден. Добавьте рядом с аудиофайлом файл .lrc или .txt.</p>}
+          {lyrics ? (timedLyrics.length ? <div className="space-y-2">{timedLyrics.map((line, index) => <p key={index} className={`transition-colors ${index === activeLyricIndex ? 'text-white font-semibold' : 'text-white/55'}`}>{line.text}</p>)}</div> : <pre className="whitespace-pre-wrap font-sans">{lyrics}</pre>) : <p className="text-white/60">Для этого трека текст песни не найден. Добавьте рядом с аудиофайлом файл .lrc или .txt.</p>}
         </div>
       )}
       <footer className="relative flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:px-6 md:px-8 md:pb-8">
