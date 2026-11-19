@@ -348,7 +348,7 @@ export function ArtistDetail() {
 /* ================================================================== */
 
 export function Playlists() {
-  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, playTrack, playPlaylist } = usePlayer()
+  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist, playTrack, playPlaylist } = usePlayer()
   const [name, setName] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [search, setSearch] = useState('')
@@ -407,7 +407,7 @@ export function Playlists() {
             {selectedTracks.length ? <div className="mt-2 space-y-1">{selectedTracks.map((track,index) => <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
               <span className="t-mute w-5 text-xs">{index+1}</span><img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-10 w-10 rounded-lg object-cover"/>
               <button type="button" onClick={() => void playTrack(track)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist}</span></button>
-              <button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
+              <button type="button" disabled={index===0} onClick={() => movePlaylistTrack(selected.id,index,index-1)} aria-label={`Переместить ${track.title} выше`} title="Выше" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-25"><ArrowUp size={14}/></button><button type="button" disabled={index===selectedTracks.length-1} onClick={() => movePlaylistTrack(selected.id,index,index+1)} aria-label={`Переместить ${track.title} ниже`} title="Ниже" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-25"><ArrowDown size={14}/></button><button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
             </div>)}</div> : <p className="t-dim mt-2 text-sm">Добавь первые треки ниже.</p>}
           </div>
           <div className="border-t border-[var(--r-line)] p-4">
