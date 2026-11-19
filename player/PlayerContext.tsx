@@ -244,6 +244,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queueIds))
+    preloadedTrackIdRef.current = ''
   }, [queueIds])
 
   useEffect(() => {
@@ -335,7 +336,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setSyncLoaded(false)
     request<SyncState>('/api/sync', {}, accessKey).then(remote => {
       if (!active) return
-      if (remote.playback) setSavedPlayback(current => !current || (remote.playback!.updatedAt || '') > (current.updatedAt || '') ? remote.playback! : current)
+      if (remote.playback) {
+        const isNewer = !savedPlayback || (remote.playback.updatedAt || '') > (savedPlayback.updatedAt || '')
+        if (isNewer) {
+          setSavedPlayback(remote.playback)
+          if (!isPlaying && tracks.some(track => track.id === remote.playback!.trackId)) restoredPlaybackRef.current = false
+        }
+      }
       if (remote.appearance) {
         for (const [key, value] of Object.entries(remote.appearance)) updateAppearance(key as keyof Appearance, value as never)
       }
@@ -359,7 +366,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (active) setSyncLoaded(true)
     })
     return () => { active = false }
-  }, [connected, accessKey])
+  }, [connected, accessKey, tracks, isPlaying])
 
   useEffect(() => {
     if (!connected || !accessKey || !syncLoaded) return
