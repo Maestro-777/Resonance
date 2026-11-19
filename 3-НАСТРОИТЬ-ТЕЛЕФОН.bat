@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal
 title Resonance - доступ с телефона
 cd /d "%~dp0"
@@ -34,7 +35,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo Откройте HTTPS-адрес Tailscale Serve на телефоне.
+echo Адрес для телефона показан ниже:
+echo.
+tailscale serve status
+echo.
+echo Скопируйте HTTPS-адрес вида https://имя-компьютера.имя-сети.ts.net и откройте его на телефоне.
 echo Tailscale должен быть включён на компьютере и телефоне.
 echo Компьютер должен оставаться включённым и не переходить в сон.
 echo Порт музыкального API 4317 наружу не публикуется.
