@@ -638,6 +638,86 @@ export function Player() {
   )
 }
 
+
+/* ================================================================== */
+/*  Редактор метаданных отдельного трека                               */
+/* ================================================================== */
+
+export function TrackMetadataEditor() {
+  const { id = '' } = useParams()
+  const { tracks, connected, accessKey, refreshLibrary } = usePlayer()
+  const track = tracks.find(item => item.id === id)
+  const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
+  const [coverData, setCoverData] = useState('')
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+  const supported = track ? ['MP3','FLAC','M4A','OGG','OPUS'].includes(track.format) : false
+
+  useEffect(() => {
+    if (!id || !accessKey || !connected) return
+    let active = true
+    setMessage('')
+    void fetch(`/api/metadata/${encodeURIComponent(id)}`, { headers: { 'x-resonance-key': accessKey } })
+      .then(async response => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Не удалось прочитать теги')
+        if (active) setMetadata({ title: result.title || '', artist: result.artist || '', album: result.album || '', genre: result.genre || '', year: result.year ? String(result.year) : '', trackNumber: result.trackNumber ? String(result.trackNumber) : '' })
+      })
+      .catch(cause => { if (active) setMessage(cause instanceof Error ? cause.message : 'Ошибка чтения тегов') })
+    return () => { active = false }
+  }, [id, accessKey, connected])
+
+  const save = async () => {
+    if (!id || !supported) return
+    setSaving(true); setMessage('')
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(id)}`, { method:'PUT', headers:{'Content-Type':'application/json','x-resonance-key':accessKey}, body:JSON.stringify(coverData ? {...metadata,coverData} : metadata) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
+      await refreshLibrary()
+      setCoverData('')
+      setMessage('Изменения сохранены. Исходный файл помещён в резервную копию.')
+    } catch(cause) { setMessage(cause instanceof Error ? cause.message : 'Ошибка сохранения') }
+    finally { setSaving(false) }
+  }
+
+  const restore = async () => {
+    if (!id) return
+    setSaving(true); setMessage('')
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(id)}/restore`, {method:'POST',headers:{'x-resonance-key':accessKey}})
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить оригинал')
+      await refreshLibrary()
+      setMessage('Оригинальные метаданные восстановлены.')
+    } catch(cause) { setMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления') }
+    finally { setSaving(false) }
+  }
+
+  if (!connected) return <div className="panel p-5"><p className="t-dim">Сначала подключи музыкальный сервер.</p><Link to="/settings" className="accent-text mt-3 inline-block">Открыть настройки сервера</Link></div>
+  if (!track) return <div className="panel p-5"><p className="t-dim">Трек не найден в текущей библиотеке.</p><Link to="/library" className="accent-text mt-3 inline-block">Вернуться в библиотеку</Link></div>
+  return <div className="fade-up mx-auto max-w-3xl">
+    <Link to="/library" className="t-dim mb-5 inline-flex items-center gap-2 text-sm hover:text-[var(--r-text)]"><ArrowLeft size={16}/>Назад в библиотеку</Link>
+    <PageHead title="Метаданные трека" subtitle="Изменения записываются непосредственно в аудиофайл; перед записью создаётся резервная копия."/>
+    <section className="panel p-4 sm:p-6">
+      <div className="mb-5 flex items-center gap-4">
+        <img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-20 w-20 rounded-xl object-cover"/>
+        <div className="min-w-0"><p className="truncate font-semibold">{track.title}</p><p className="t-dim truncate text-sm">{track.artist} · {track.format}</p><p className="t-mute mt-1 text-xs">{track.relativePath}</p></div>
+      </div>
+      {!supported ? <p className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-200">Редактирование тегов для формата {track.format} пока не поддерживается.</p> : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(['title','artist','album','genre','year','trackNumber'] as const).map(field => <label key={field} className="block"><span className="t-mute mb-1.5 block text-xs">{({title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',trackNumber:'Номер дорожки'})[field]}</span><input disabled={!supported} value={metadata[field]} onChange={event=>setMetadata(value=>({...value,[field]:event.target.value}))} className="h-11 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)] disabled:opacity-50"/></label>)}
+      </div>
+      <div className="mt-5 rounded-xl border border-dashed border-[var(--r-line)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-medium">Обложка трека</p><p className="t-mute mt-1 text-xs">JPG или PNG, до 8 МБ</p></div><label className="accent-btn inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm"><ImagePlus size={15}/>Выбрать изображение<input type="file" accept="image/jpeg,image/png" className="sr-only" disabled={!supported} onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>8*1024*1024){setMessage('Изображение должно быть не больше 8 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>setCoverData(typeof reader.result==='string'?reader.result:'');reader.readAsDataURL(file);event.target.value=''}}/></label></div>
+        {coverData ? <div className="mt-3 flex items-center gap-3"><img src={coverData} alt="Новая обложка" className="h-16 w-16 rounded-lg object-cover"/><span className="text-xs text-emerald-400">Новая обложка выбрана</span><button type="button" onClick={()=>setCoverData('')} className="t-mute text-xs underline">Отменить</button></div> : null}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2"><button type="button" disabled={!supported||saving} onClick={()=>void save()} className="accent-btn inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40"><Save size={15}/>{saving?'Сохранение…':'Сохранить изменения'}</button><button type="button" disabled={saving} onClick={()=>void restore()} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm"><RotateCcw size={14}/>Восстановить оригинал</button></div>
+      {message ? <p role="status" className="t-dim mt-4 text-sm">{message}</p> : null}
+    </section>
+  </div>
+}
+
 /* ================================================================== */
 /*  Настройки                                                          */
 /* ================================================================== */
@@ -812,46 +892,6 @@ export function Settings() {
         {serverMessage || error ? <p role="status" className="mt-3 text-sm text-[var(--r-text-dim)]">{serverMessage || error}</p> : null}
         {accessKey && !connected ? <p className="t-mute mt-2 text-xs">Ключ сохранён в этом браузере. Проверьте, что сервер запущен на этом компьютере.</p> : null}
       </section>
-
-      {connected ? (
-        <section className="panel mb-5 p-4 md:p-5">
-          <h2 className="text-base font-semibold">Редактор метаданных</h2>
-          <p className="t-dim mt-1 text-sm">Изменяйте название, исполнителя, альбом, жанр, год и номер дорожки. Перед записью сервер сохраняет оригинал.</p>
-          <select value={editTrackId} onChange={event => setEditTrackId(event.target.value)} aria-label="Трек для редактирования" className="mt-4 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
-            <option value="">Выберите трек</option>
-            {tracks.filter(track => ['MP3', 'FLAC', 'M4A', 'OGG', 'OPUS'].includes(track.format)).map(track => <option key={track.id} value={track.id}>{track.title} — {track.artist} ({track.format})</option>)}
-          </select>
-          {editTrackId ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {(['title', 'artist', 'album', 'genre', 'year', 'trackNumber'] as const).map(field => (
-                <label key={field} className="block">
-                  <span className="t-mute mb-1 block text-xs">{({ title: 'Название', artist: 'Исполнитель', album: 'Альбом', genre: 'Жанр', year: 'Год', trackNumber: 'Номер дорожки' })[field]}</span>
-                  <input value={metadata[field]} onChange={event => setMetadata(value => ({ ...value, [field]: event.target.value }))} className="h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]" />
-                </label>
-              ))}
-              <label className="block sm:col-span-2">
-                <span className="t-mute mb-1 block text-xs">Новая обложка (JPG или PNG, до 8 МБ)</span>
-                <input type="file" accept="image/jpeg,image/png" onChange={event => {
-                  const file = event.target.files?.[0]
-                  if (!file) return
-                  if (file.size > 8 * 1024 * 1024) { setMetadataMessage('Обложка должна быть не больше 8 МБ.'); event.target.value = ''; return }
-                  const reader = new FileReader()
-                  reader.onload = () => setCoverData(typeof reader.result === 'string' ? reader.result : '')
-                  reader.onerror = () => setMetadataMessage('Не удалось прочитать изображение.')
-                  reader.readAsDataURL(file)
-                  event.target.value = ''
-                }} className="block w-full text-sm t-dim file:mr-3 file:rounded-full file:border-0 file:bg-[var(--r-panel-2)] file:px-4 file:py-2 file:text-xs file:font-medium file:text-[var(--r-text)]" />
-                {coverData ? <span className="mt-1 block text-xs text-emerald-400">Обложка готова к сохранению</span> : null}
-              </label>
-              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
-                <button type="button" disabled={savingMetadata} onClick={() => void saveTags()} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{savingMetadata ? 'Сохранение…' : 'Сохранить теги'}</button>
-                <button type="button" disabled={savingMetadata} onClick={() => void restoreTags()} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm disabled:opacity-50">Восстановить копию</button>
-              </div>
-            </div>
-          ) : null}
-          {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
-        </section>
-      ) : null}
 
       {connected ? (
         <section className="panel mb-5 p-4 md:p-5">
