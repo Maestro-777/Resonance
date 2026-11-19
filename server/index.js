@@ -139,7 +139,7 @@ async function scanLibrary() {
   finally { if (scanPromise === currentScan) scanPromise = null }
 }
 
-app.get('/api/health', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ ok: true, name: 'Resonance Music Server', version: '0.1.0', requiresKey: Boolean(API_ACCESS_KEY), lastScan, trackCount: tracks.length, musicRoot: MUSIC_ROOT }))
+app.get('/api/health', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ ok: true, name: 'Resonance Music Server', version: '0.1.0', requiresKey: Boolean(API_ACCESS_KEY), lastScan, trackCount: tracks.length }))
 app.get('/api/library', (_req, res) => res.json({ tracks, lastScan, root: MUSIC_ROOT }))
 app.get('/api/cover/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
