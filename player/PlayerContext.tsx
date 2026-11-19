@@ -258,11 +258,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!tracks.length || restoredPlaybackRef.current) return
-    restoredPlaybackRef.current = true
     try {
       const saved = JSON.parse(localStorage.getItem(PLAYBACK_KEY) || 'null') as { trackId?: string; position?: number } | null
       const track = saved?.trackId ? tracks.find(item => item.id === saved.trackId) : undefined
       if (!track) return
+      restoredPlaybackRef.current = true
       const position = Number.isFinite(saved?.position) ? Math.max(0, saved!.position!) : 0
       setCurrentTrack(track)
       setCurrentTime(position)
