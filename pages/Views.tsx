@@ -22,6 +22,7 @@ import {
   Sparkles,
   Star,
   Volume2,
+  X,
 } from 'lucide-react'
 import {
   albums,
@@ -787,7 +788,7 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
@@ -857,7 +858,7 @@ export function Player() {
       {showQueue && (
         <div className="relative mx-auto mb-3 max-h-44 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-3 text-left text-white/85 backdrop-blur">
           <div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold">Очередь · {queue.length}</span><button type="button" onClick={clearQueue} className="text-xs text-white/60 hover:text-white">Очистить</button></div>
-          {queue.length ? queue.map((item, index) => <button key={item.id + index} type="button" onClick={() => void playTrack(item)} className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10">{index + 1}. {item.title} <span className="text-white/50">— {item.artist}</span></button>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
+          {queue.length ? queue.map((item, index) => <div key={item.id + index} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/10"><button type="button" onClick={() => void playTrack(item)} className="min-w-0 flex-1 truncate text-left text-sm">{index + 1}. {item.title} <span className="text-white/50">— {item.artist}</span></button><button type="button" onClick={() => removeFromQueue(item.id)} aria-label="Убрать из очереди" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white"><X size={13} /></button></div>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
         </div>
       )}
       {showLyrics && (
