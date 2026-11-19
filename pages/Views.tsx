@@ -784,7 +784,7 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, playTrack, accessKey, sleepTimer, setSleepTimer,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
@@ -828,6 +828,7 @@ export function Player() {
         <p className="text-[0.62rem] uppercase tracking-[0.22em] text-white/55">Сейчас играет</p>
         <h1 className="mt-2 max-w-full truncate text-[2rem] font-semibold leading-tight tracking-[-0.02em] text-white md:text-[3rem]">{track?.title || 'Resonance'}</h1>
         <p className="mt-1 text-[0.9rem] text-white/65 md:text-[1.05rem]">{track ? track.artist + ' · ' + track.album : 'Подключите сервер и выберите музыку в библиотеке'}</p>
+        {error ? <p role="status" className="mt-2 text-xs text-rose-200/90">{error}</p> : null}
 
         <div className="mt-6 flex h-12 w-full max-w-[34rem] items-end justify-center gap-[3px] md:mt-8 md:h-20" aria-hidden="true">
           {waveHeights.map((height, index) => <span key={index} className={`flex-1 rounded-full transition-colors ${index < bars ? 'accent-grad' : 'bg-white/15'} ${isPlaying ? 'wave-bar' : ''}`} style={{ height: `${height}%`, animationDelay: `${(index % 12) * 70}ms`, animationDuration: `${1 + (index % 5) * 0.16}s` }} />)}
@@ -874,6 +875,10 @@ export function Player() {
             <option value="90">Остановить через 90 минут</option>
             <option value="0">Отключить таймер</option>
           </select>
+          <label className="inline-flex items-center gap-2 text-white/70">
+            <Volume2 size={15} />
+            <input type="range" min={0} max={100} value={Math.round(volume * 100)} onChange={event => setVolume(Number(event.target.value) / 100)} aria-label="Громкость" className="r-range w-20" style={{ ['--_p' as string]: `${volume * 100}%` } as CSSProperties} />
+          </label>
           <span className="text-xs text-white/50">В очереди: {queue.length} · {track?.format || '—'}</span>
         </div>
       </footer>
