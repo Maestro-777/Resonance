@@ -70,6 +70,7 @@ type PlayerContextValue = {
   toggleFavorite: (id: string) => void
   addToQueue: (track: LibraryTrack) => void
   clearQueue: () => void
+  removeFromQueue: (trackId: string) => void
   sleepTimer: number | null
   setSleepTimer: (minutes: number | null) => void
   crossfadeSeconds: number
@@ -719,6 +720,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearQueue = useCallback(() => setQueueIds([]), [])
+  const removeFromQueue = useCallback((trackId: string) => setQueueIds(items => items.filter(id => id !== trackId)), [])
 
   useEffect(() => {
     const primary = audioRef.current
@@ -860,8 +862,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
-    toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
+    toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer,
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
 
   return (
     <PlayerContext.Provider value={value}>
