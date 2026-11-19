@@ -69,7 +69,7 @@ export function sanitizeSyncState(value = {}) {
         name: item.name.trim().slice(0, 120),
         trackIds: strings(item.trackIds, 5000),
         ...(typeof item.description === 'string' ? { description: item.description.slice(0, 500) } : {}),
-        ...(typeof item.cover === 'string' && item.cover.length <= 8 * 1024 * 1024 && /^(data:image\\/(?:png|jpeg|webp|gif);base64,|\\/api\\/artwork\\/)[A-Za-z0-9+/=_-]*$/i.test(item.cover) ? { cover: item.cover } : {}),
+        ...(typeof item.cover === 'string' && item.cover.length <= 8 * 1024 * 1024 && (new RegExp('^data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$', 'i').test(item.cover) || new RegExp('^/api/artwork/[A-Za-z0-9_-]{1,128}$').test(item.cover)) ? { cover: item.cover } : {}),
       }))
       .filter(item => item.name.length > 0)
     : []
