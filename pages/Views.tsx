@@ -35,6 +35,7 @@ import {
 } from '@/data'
 import { AppearanceControls, useAppearance } from '@/theme'
 import { Cover, LibraryTiles, SectionHeader } from '@/components/Shell'
+import { formatTime, usePlayer, type LibraryTrack } from '@/player/PlayerContext'
 
 /* ================================================================== */
 /*  Вспомогательные блоки                                              */
@@ -196,6 +197,32 @@ function TrackList({
   )
 }
 
+function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
+  const { currentTrack, isPlaying, playTrack, togglePlay, toggleFavorite, favorites, addToQueue } = usePlayer()
+  if (!items.length) return <p className="t-dim rounded-xl border border-dashed border-[var(--r-line)] p-5 text-sm">В музыкальной папке пока не найдено аудиофайлов. Проверьте путь MUSIC_ROOT и запустите сканирование в настройках.</p>
+  return (
+    <div className="space-y-1">
+      {items.map((track, index) => {
+        const active = currentTrack?.id === track.id
+        const liked = favorites.includes(track.id)
+        return (
+          <div key={track.id} className={`group grid grid-cols-[2rem_2.5rem_minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}>
+            <span className="t-mute text-center text-xs tabular-nums">{active && isPlaying ? <AudioLines size={15} className="mx-auto accent-text" /> : index + 1}</span>
+            <img src={`/api/cover/${encodeURIComponent(track.id)}`} onError={event => { event.currentTarget.style.visibility = 'hidden' }} alt="" className="h-10 w-10 rounded-lg bg-[var(--r-panel-2)] object-cover" />
+            <button type="button" onClick={() => active ? void togglePlay() : void playTrack(track)} className="min-w-0 text-left">
+              <span className={`block truncate text-sm font-medium ${active ? 'accent-text' : ''}`}>{track.title}</span>
+              <span className="t-mute block truncate text-xs">{track.artist} · {track.album}</span>
+            </button>
+            <span className="t-mute hidden text-xs tabular-nums sm:block">{formatTime(track.duration)}</span>
+            <button type="button" onClick={() => toggleFavorite(track.id)} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} aria-pressed={liked} className={`grid h-8 w-8 place-items-center rounded-full hover:bg-[var(--r-panel-2)] ${liked ? 'text-[var(--r-accent)]' : 't-mute'}`}><Heart size={15} fill={liked ? 'currentColor' : 'none'} /></button>
+            <button type="button" onClick={() => addToQueue(track)} aria-label="Добавить в очередь" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)]"><Plus size={16} /></button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ================================================================== */
 /*  Главная                                                            */
 /* ================================================================== */
@@ -344,6 +371,9 @@ export function Home() {
 export function Library() {
   const [filter, setFilter] = useState<string>(libraryFilters[0])
   const [sort, setSort] = useState('default')
+  const { tracks, connected } = usePlayer()
+  const [query, setQuery] = useState('')
+  const serverTracks = tracks.filter(track => [track.title, track.artist, track.album].some(value => value.toLowerCase().includes(query.toLowerCase()))).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'new' ? b.year - a.year : a.artist.localeCompare(b.artist))
 
   return (
     <div className="fade-up">
@@ -390,6 +420,24 @@ export function Library() {
           )
         })}
       </div>
+
+      {connected ? (
+        <section className="panel mb-8 p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">Музыка на сервере</h2>
+              <p className="t-mute mt-1 text-xs">{tracks.length} треков в вашей музыкальной папке</p>
+            </div>
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти трек, альбом или исполнителя" aria-label="Поиск по музыкальной библиотеке" className="h-9 w-full max-w-xs rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+          </div>
+          <ServerTrackRows items={serverTracks} />
+        </section>
+      ) : (
+        <div className="panel mb-8 p-4 text-sm t-dim">
+          Подключите музыкальный сервер в настройках, чтобы увидеть настоящую библиотеку и начать воспроизведение.
+          <Link to="/settings" className="ml-2 accent-text">Настроить сервер</Link>
+        </div>
+      )}
 
       <div className="mb-8">
         <LibraryTiles />
@@ -661,209 +709,60 @@ const waveHeights = Array.from({ length: 72 }).map(
 )
 
 export function Player() {
-  const [playing, setPlaying] = useState(true)
-  const [progress, setProgress] = useState(0.42)
-  const [liked, setLiked] = useState(true)
-  const [shuffle, setShuffle] = useState(false)
-  const [repeat, setRepeat] = useState(false)
+  const {
+    currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue,
+  } = usePlayer()
+  const track = currentTrack || tracks[0] || null
+  const liked = track ? favorites.includes(track.id) : false
+  const progress = duration > 0 ? currentTime / duration : 0
   const bars = Math.round(waveHeights.length * progress)
-
-  const glassBtn =
-    'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
+  const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
+  const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : covers.mountains
 
   return (
     <div className="reveal relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <img
-        src={nowPlaying.cover}
-        alt=""
-        className="ken-burns absolute inset-0 h-full w-full object-cover"
-      />
+      <img src={cover} alt="" className="ken-burns absolute inset-0 h-full w-full object-cover" />
       <div className="absolute inset-0 bg-[radial-gradient(90%_75%_at_50%_38%,rgba(122,44,204,0.38),transparent_70%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,4,14,0.74)_0%,rgba(7,4,14,0.4)_40%,rgba(5,3,10,0.94)_100%)]" />
 
       <header className="relative flex shrink-0 items-center justify-between px-4 py-4 md:px-8 md:py-6">
-        <Link to="/" aria-label="Назад" className={`${glassBtn} h-10 w-10`}>
-          <ArrowLeft size={18} />
-        </Link>
+        <Link to="/" aria-label="Назад" className={`${glassBtn} h-10 w-10`}><ArrowLeft size={18} /></Link>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Очередь воспроизведения"
-            className={`${glassBtn} h-10 w-10`}
-          >
-            <ListMusic size={17} />
-          </button>
-          <button type="button" aria-label="Ещё" className={`${glassBtn} h-10 w-10`}>
-            <MoreHorizontal size={17} />
-          </button>
+          <button type="button" title={`Очередь: ${queue.length} треков`} className={`${glassBtn} h-10 w-10`}><ListMusic size={17} /></button>
+          <button type="button" aria-label="Добавить текущий трек в очередь" onClick={() => track && addToQueue(track)} className={`${glassBtn} h-10 w-10`}><Plus size={17} /></button>
         </div>
       </header>
 
       <div className="scroll-y relative flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-2 text-center md:px-8">
         <p className="text-[0.62rem] uppercase tracking-[0.22em] text-white/55">Сейчас играет</p>
-        <h1 className="mt-2 text-[2rem] font-semibold leading-tight tracking-[-0.02em] text-white md:text-[3rem]">
-          {nowPlaying.title}
-        </h1>
-        <p className="mt-1 text-[0.9rem] text-white/65 md:text-[1.05rem]">{nowPlaying.artist}</p>
+        <h1 className="mt-2 max-w-full truncate text-[2rem] font-semibold leading-tight tracking-[-0.02em] text-white md:text-[3rem]">{track?.title || 'Resonance'}</h1>
+        <p className="mt-1 text-[0.9rem] text-white/65 md:text-[1.05rem]">{track ? track.artist + ' · ' + track.album : 'Подключите сервер и выберите музыку в библиотеке'}</p>
 
-        <div
-          className="mt-6 flex h-12 w-full max-w-[34rem] items-end justify-center gap-[3px] md:mt-8 md:h-20"
-          aria-hidden="true"
-        >
-          {waveHeights.map((height, index) => (
-            <span
-              key={index}
-              className={`flex-1 rounded-full transition-colors ${
-                index < bars ? 'accent-grad' : 'bg-white/15'
-              } ${playing ? 'wave-bar' : ''}`}
-              style={{
-                height: `${height}%`,
-                animationDelay: `${(index % 12) * 70}ms`,
-                animationDuration: `${1 + (index % 5) * 0.16}s`,
-              }}
-            />
-          ))}
+        <div className="mt-6 flex h-12 w-full max-w-[34rem] items-end justify-center gap-[3px] md:mt-8 md:h-20" aria-hidden="true">
+          {waveHeights.map((height, index) => <span key={index} className={`flex-1 rounded-full transition-colors ${index < bars ? 'accent-grad' : 'bg-white/15'} ${isPlaying ? 'wave-bar' : ''}`} style={{ height: `${height}%`, animationDelay: `${(index % 12) * 70}ms`, animationDuration: `${1 + (index % 5) * 0.16}s` }} />)}
         </div>
 
         <div className="mt-5 w-full max-w-[34rem]">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(progress * 100)}
-            aria-label="Позиция воспроизведения"
-            onChange={(event) => setProgress(Number(event.target.value) / 100)}
-            className="r-range"
-            style={{ ['--_p' as string]: `${progress * 100}%` } as CSSProperties}
-          />
-          <div className="mt-2 flex justify-between text-[0.7rem] tabular-nums text-white/55">
-            <span>{nowPlaying.elapsed}</span>
-            <span>{nowPlaying.duration}</span>
-          </div>
+          <input type="range" min={0} max={Math.max(1, duration)} step={0.1} value={Math.min(currentTime, duration || 0)} aria-label="Позиция воспроизведения" disabled={!track} onChange={event => seek(Number(event.target.value))} className="r-range" style={{ ['--_p' as string]: `${progress * 100}%` } as CSSProperties} />
+          <div className="mt-2 flex justify-between text-[0.7rem] tabular-nums text-white/55"><span>{formatTime(currentTime)}</span><span>{formatTime(duration || track?.duration || 0)}</span></div>
         </div>
 
         <div className="mt-4 flex w-full max-w-[32rem] items-center justify-center gap-2.5 md:mt-6 md:gap-3.5">
           <div className="flex items-center gap-2 md:gap-3.5">
-            <button
-              type="button"
-              onClick={() => setShuffle((value) => !value)}
-              aria-pressed={shuffle}
-              aria-label="Перемешать"
-              className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${
-                shuffle ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'
-              }`}
-            >
-              <Shuffle size={17} />
-            </button>
-            <button
-              type="button"
-              aria-label="Предыдущий трек"
-              className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"
-            >
-              <SkipBack size={19} fill="currentColor" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlaying((value) => !value)}
-              aria-label={playing ? 'Пауза' : 'Слушать'}
-              className={`accent-btn grid h-14 w-14 place-items-center rounded-full transition-transform hover:scale-105 ${
-                playing ? 'playing-glow' : ''
-              }`}
-            >
-              <span key={playing ? 'pause' : 'play'} className="pop grid place-items-center">
-                {playing ? (
-                  <Pause size={20} fill="currentColor" />
-                ) : (
-                  <Play size={20} fill="currentColor" className="ml-0.5" />
-                )}
-              </span>
-            </button>
-            <button
-              type="button"
-              aria-label="Следующий трек"
-              className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"
-            >
-              <SkipForward size={19} fill="currentColor" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setRepeat((value) => !value)}
-              aria-pressed={repeat}
-              aria-label="Повтор"
-              className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${
-                repeat ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'
-              }`}
-            >
-              <Repeat size={17} />
-            </button>
+            <button type="button" onClick={toggleShuffle} aria-pressed={shuffle} aria-label="Перемешать" className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${shuffle ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'}`}><Shuffle size={17} /></button>
+            <button type="button" onClick={() => void previous()} aria-label="Предыдущий трек" className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"><SkipBack size={19} fill="currentColor" /></button>
+            <button type="button" onClick={() => void togglePlay()} disabled={!track} aria-label={isPlaying ? 'Пауза' : 'Слушать'} className={`accent-btn grid h-14 w-14 place-items-center rounded-full transition-transform hover:scale-105 disabled:opacity-40 ${isPlaying ? 'playing-glow' : ''}`}>{isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}</button>
+            <button type="button" onClick={() => void next()} aria-label="Следующий трек" className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"><SkipForward size={19} fill="currentColor" /></button>
+            <button type="button" onClick={cycleRepeat} aria-pressed={repeat !== 'off'} aria-label={`Повтор: ${repeat}`} className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${repeat !== 'off' ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'}`}><Repeat size={17} /></button>
           </div>
-
-          <div className="hidden items-center gap-1 pl-1 md:flex">
-            <button
-              type="button"
-              onClick={() => setLiked((value) => !value)}
-              aria-pressed={liked}
-              aria-label={liked ? 'Убрать из избранного' : 'В избранное'}
-              className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${
-                liked ? 'text-[var(--r-accent)]' : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <Heart size={19} fill={liked ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              type="button"
-              aria-label="Ещё"
-              className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition-colors hover:bg-white/12 hover:text-white"
-            >
-              <MoreHorizontal size={19} />
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-2 flex items-center justify-center gap-10 md:hidden">
-          <button
-            type="button"
-            onClick={() => setLiked((value) => !value)}
-            aria-pressed={liked}
-            aria-label={liked ? 'Убрать из избранного' : 'В избранное'}
-            className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${
-              liked ? 'text-[var(--r-accent)]' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            <Heart size={19} fill={liked ? 'currentColor' : 'none'} />
-          </button>
-          <button
-            type="button"
-            aria-label="Очередь воспроизведения"
-            className="grid h-10 w-10 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/12 hover:text-white"
-          >
-            <ListMusic size={19} />
-          </button>
-          <button
-            type="button"
-            aria-label="Ещё"
-            className="grid h-10 w-10 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/12 hover:text-white"
-          >
-            <MoreHorizontal size={19} />
-          </button>
+          <button type="button" onClick={() => track && toggleFavorite(track.id)} disabled={!track} aria-pressed={liked} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${liked ? 'text-[var(--r-accent)]' : 'text-white/80 hover:text-white'}`}><Heart size={19} fill={liked ? 'currentColor' : 'none'} /></button>
         </div>
       </div>
 
       <footer className="relative hidden shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:flex md:px-8 md:pb-8">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/20"
-        >
-          <ListMusic size={15} />
-          Очередь
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/20"
-        >
-          <AlignLeft size={15} />
-          Текст песни
-        </button>
+        <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] text-white/75 backdrop-blur">В очереди: {queue.length}</span>
+        <span className="text-xs text-white/50">Формат: {track?.format || '—'}</span>
       </footer>
     </div>
   )
