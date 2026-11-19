@@ -785,7 +785,7 @@ export function Settings() {
           {connected ? (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={disconnect} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">Отключить сервер</button>
-              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage(`Готово. Найдено треков: ${tracks.length}.`)).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование папки…' : 'Обновить мои треки'}</button>
+              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено. Список треков обновлён.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование папки…' : 'Обновить мои треки'}</button>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
                 {uploading ? 'Загрузка…' : 'Загрузить музыку'}
                 <input type="file" accept="audio/*,.flac,.opus,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
@@ -806,7 +806,7 @@ export function Settings() {
             </div>
           ) : null}
         </div>
-        {!connected ? <div className="mt-3"><a href="file:///C:/not-a-real-path" className="hidden" aria-hidden="true">.</a><p className="text-xs t-mute">Открой файл server/.env в папке Resonance на компьютере. Нужна строка RESONANCE_ACCESS_KEY=…</p></div> : null}
+        {!connected ? <div className="mt-3"><p className="text-xs t-mute">Открой файл server/.env в папке Resonance на компьютере. Нужна строка RESONANCE_ACCESS_KEY=…</p></div> : null}
         {!connected ? (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input type="password" autoComplete="current-password" value={serverKey} onChange={event => setServerKey(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) } }} placeholder="Ключ доступа Resonance" aria-label="Ключ доступа сервера" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
