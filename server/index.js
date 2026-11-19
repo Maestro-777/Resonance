@@ -51,7 +51,7 @@ let scanPromise = null
 
 app.use(cors({ credentials: true, origin(origin, callback) {
   const isPrivateLan = origin && /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
-  const isTailscale = origin && /^https:\/\/[a-z0-9-]+\.ts\.net$/.test(origin)
+  const isTailscale = origin && /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.ts\.net$/.test(origin)
   if (!origin || allowedOrigins.includes(origin) || isPrivateLan || isTailscale) return callback(null, true)
   return callback(new Error('Origin is not allowed by CORS'))
 } }))
