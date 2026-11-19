@@ -37,6 +37,7 @@ import {
 import { AppearanceControls, useAppearance } from '@/theme'
 import { Cover, LibraryTiles, SectionHeader } from '@/components/Shell'
 import { formatTime, usePlayer, type LibraryTrack } from '@/player/PlayerContext'
+import { deleteOfflineTrack, listOfflineTracks, saveOfflineTrack, type OfflineTrackRecord } from '@/lib/offline'
 
 /* ================================================================== */
 /*  Вспомогательные блоки                                              */
@@ -682,15 +683,75 @@ export function History() {
 
 
 export function Offline() {
+  const { tracks, accessKey, playOfflineTrack } = usePlayer()
+  const [saved, setSaved] = useState<OfflineTrackRecord[]>([])
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [message, setMessage] = useState('')
+  const refresh = () => listOfflineTracks().then(setSaved).catch(cause => setMessage(cause instanceof Error ? cause.message : 'Не удалось открыть офлайн-хранилище.'))
+  useEffect(() => { void refresh() }, [])
+  const save = async (track: LibraryTrack) => {
+    setBusyId(track.id)
+    setMessage('')
+    try {
+      await saveOfflineTrack({
+        id: track.id, title: track.title, artist: track.artist, album: track.album,
+        duration: track.duration, format: track.format, year: track.year, genre: track.genre,
+      }, `/api/stream/${encodeURIComponent(track.id)}`, accessKey)
+      await refresh()
+      setMessage('Трек сохранён на этом устройстве.')
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Не удалось сохранить трек.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+  const playSaved = (record: OfflineTrackRecord) => {
+    const item = record.track
+    const track: LibraryTrack = {
+      id: item.id, title: item.title, artist: item.artist, album: item.album, albumArtist: item.artist,
+      track: null, year: item.year, genre: item.genre, duration: item.duration, format: item.format,
+      replayGainDb: null, size: record.size, relativePath: '', hasEmbeddedPicture: false,
+    }
+    void playOfflineTrack(track, record.blob)
+  }
+  const remove = async (id: string) => {
+    await deleteOfflineTrack(id)
+    await refresh()
+  }
+
   return (
     <div className="fade-up">
-      <PageHead title="Офлайн-загрузки" subtitle="Треки, доступные без подключения к сети">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-3 py-1.5 text-[0.76rem] text-[var(--r-text-dim)]">
-          <Download size={14} />
-          45 треков
-        </span>
+      <PageHead title="Офлайн-загрузки" subtitle="Музыка, сохранённая в памяти этого устройства">
+        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-3 py-1.5 text-[0.76rem] text-[var(--r-text-dim)]"><Download size={14} />{saved.length} треков</span>
       </PageHead>
-      <TrackList items={flatTracks.slice(3, 11)} withCover activeIndex={3} />
+      {message ? <p role="status" className="mb-4 text-sm t-dim">{message}</p> : null}
+      {saved.length ? (
+        <div className="panel mb-6 p-3">
+          {saved.map(record => (
+            <div key={record.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
+              <button type="button" onClick={() => playSaved(record)} className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-sm font-medium">{record.track.title}</span>
+                <span className="t-mute block truncate text-xs">{record.track.artist} · {formatTime(record.track.duration)} · {(record.size / 1024 / 1024).toFixed(1)} МБ</span>
+              </button>
+              <button type="button" onClick={() => void remove(record.id)} aria-label="Удалить офлайн-трек" className="rounded-full p-2 t-mute hover:bg-[var(--r-panel-2)]"><MoreHorizontal size={17} /></button>
+            </div>
+          ))}
+        </div>
+      ) : <p className="panel mb-6 p-5 text-sm t-dim">Здесь пока пусто. Сохраните треки ниже, чтобы слушать их без подключения к серверу.</p>}
+      <section className="panel p-4 md:p-5">
+        <h2 className="mb-3 text-base font-semibold">Доступные для загрузки</h2>
+        {!accessKey ? <p className="t-dim text-sm">Сначала подключите сервер в настройках.</p> : tracks.length ? (
+          <div className="space-y-1">
+            {tracks.map(track => {
+              const isSaved = saved.some(item => item.id === track.id)
+              return <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2">
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist} · {formatTime(track.duration)}</span></span>
+                <button type="button" disabled={isSaved || busyId === track.id} onClick={() => void save(track)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs font-medium disabled:opacity-40">{isSaved ? 'Сохранён' : busyId === track.id ? 'Загрузка…' : 'Скачать'}</button>
+              </div>
+            })}
+          </div>
+        ) : <p className="t-dim text-sm">Музыкальная библиотека пуста.</p>}
+      </section>
     </div>
   )
 }
