@@ -54,6 +54,7 @@ type PlayerContextValue = {
   addTrackToPlaylist: (playlistId: string, trackId: string) => void
   updatePlaylist: (playlistId: string, patch: Partial<Pick<UserPlaylist, 'name' | 'cover' | 'description'>>) => void
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void
+  movePlaylistTrack: (playlistId: string, fromIndex: number, toIndex: number) => void
   deletePlaylist: (playlistId: string) => void
   loading: boolean
   error: string | null
@@ -74,6 +75,8 @@ type PlayerContextValue = {
   cycleRepeat: () => void
   toggleFavorite: (id: string) => void
   addToQueue: (track: LibraryTrack) => void
+  moveQueueItem: (fromIndex: number, toIndex: number) => void
+  playPlaylist: (trackIds: string[]) => Promise<void>
   clearQueue: () => void
   removeFromQueue: (trackId: string) => void
   sleepTimer: number | null
@@ -425,6 +428,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const removeTrackFromPlaylist = useCallback((playlistId: string, trackId: string) => {
     setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: item.trackIds.filter(id => id !== trackId) } : item))
+  }, [])
+
+  const movePlaylistTrack = useCallback((playlistId: string, fromIndex: number, toIndex: number) => {
+    setPlaylists(items => items.map(item => {
+      if (item.id !== playlistId || fromIndex < 0 || toIndex < 0 || fromIndex >= item.trackIds.length || toIndex >= item.trackIds.length || fromIndex === toIndex) return item
+      const trackIds = [...item.trackIds]
+      const [moved] = trackIds.splice(fromIndex, 1)
+      trackIds.splice(toIndex, 0, moved)
+      return { ...item, trackIds }
+    }))
   }, [])
 
   const deletePlaylist = useCallback((playlistId: string) => {
@@ -804,6 +817,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setQueueIds(current => current.includes(track.id) ? current : [...current, track.id])
   }, [])
 
+  const moveQueueItem = useCallback((fromIndex: number, toIndex: number) => {
+    setQueueIds(items => {
+      if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length || fromIndex === toIndex) return items
+      const next = [...items]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  const playPlaylist = useCallback(async (trackIds: string[]) => {
+    const orderedTracks = trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
+    if (!orderedTracks.length) return
+    setQueueIds(orderedTracks.slice(1).map(track => track.id))
+    await playTrack(orderedTracks[0])
+  }, [playTrack, tracks])
+
   const clearQueue = useCallback(() => setQueueIds([]), [])
   const removeFromQueue = useCallback((trackId: string) => setQueueIds(items => items.filter(id => id !== trackId)), [])
 
@@ -943,12 +973,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
-    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist,
+    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist,
     loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
-    toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, appearance, updateAppearance])
+    toggleFavorite, addToQueue, moveQueueItem, playPlaylist, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum,
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, moveQueueItem, playPlaylist, clearQueue, removeFromQueue, sleepTimer, setSleepTimer, getSpectrum, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, appearance, updateAppearance])
 
   return (
     <PlayerContext.Provider value={value}>

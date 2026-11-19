@@ -4,6 +4,8 @@ import {
   AlignLeft,
   AudioLines,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -346,7 +348,7 @@ export function ArtistDetail() {
 /* ================================================================== */
 
 export function Playlists() {
-  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, deletePlaylist, playTrack } = usePlayer()
+  const { tracks, playlists, createPlaylist, addTrackToPlaylist, updatePlaylist, removeTrackFromPlaylist, movePlaylistTrack, deletePlaylist, playTrack, playPlaylist } = usePlayer()
   const [name, setName] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [search, setSearch] = useState('')
@@ -395,7 +397,7 @@ export function Playlists() {
               <input value={selected.name} onChange={event => updatePlaylist(selected.id,{name:event.target.value})} aria-label="Название плейлиста" className="mt-2 h-11 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-xl font-semibold outline-none focus:border-[var(--r-accent)]"/>
               <textarea value={selected.description || ''} onChange={event => updatePlaylist(selected.id,{description:event.target.value})} placeholder="Описание подборки (необязательно)" rows={2} className="mt-2 w-full resize-y rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] p-3 text-sm outline-none focus:border-[var(--r-accent)]"/>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" disabled={!selectedTracks.length} onClick={() => void playTrack(selectedTracks[0])} className="accent-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"><Play size={14} fill="currentColor"/>Слушать</button>
+                <button type="button" disabled={!selectedTracks.length} onClick={() => void playPlaylist(selectedTracks.map(track => track.id))} className="accent-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"><Play size={14} fill="currentColor"/>Слушать</button>
                 <button type="button" onClick={() => { if(window.confirm('Удалить плейлист?')) { deletePlaylist(selected.id); setSelectedId('') } }} className="inline-flex items-center gap-2 rounded-full border border-red-400/30 px-4 py-2 text-sm text-red-300"><Trash2 size={14}/>Удалить</button>
               </div>
             </div>
@@ -405,7 +407,7 @@ export function Playlists() {
             {selectedTracks.length ? <div className="mt-2 space-y-1">{selectedTracks.map((track,index) => <div key={track.id} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
               <span className="t-mute w-5 text-xs">{index+1}</span><img src={`/api/cover/${encodeURIComponent(track.id)}`} alt="" className="h-10 w-10 rounded-lg object-cover"/>
               <button type="button" onClick={() => void playTrack(track)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{track.title}</span><span className="t-mute block truncate text-xs">{track.artist}</span></button>
-              <button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
+              <button type="button" disabled={index===0} onClick={() => movePlaylistTrack(selected.id,index,index-1)} aria-label={`Переместить ${track.title} выше`} title="Выше" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-25"><ArrowUp size={14}/></button><button type="button" disabled={index===selectedTracks.length-1} onClick={() => movePlaylistTrack(selected.id,index,index+1)} aria-label={`Переместить ${track.title} ниже`} title="Ниже" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-25"><ArrowDown size={14}/></button><button type="button" onClick={() => removeTrackFromPlaylist(selected.id,track.id)} aria-label="Убрать из плейлиста" className="grid h-9 w-9 place-items-center rounded-full t-mute hover:text-red-300"><X size={16}/></button>
             </div>)}</div> : <p className="t-dim mt-2 text-sm">Добавь первые треки ниже.</p>}
           </div>
           <div className="border-t border-[var(--r-line)] p-4">
@@ -533,7 +535,7 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error, getSpectrum,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, moveQueueItem, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error, getSpectrum,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
@@ -619,7 +621,7 @@ export function Player() {
       {showQueue && (
         <div className="relative mx-auto mb-3 max-h-44 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-3 text-left text-white/85 backdrop-blur">
           <div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold">Очередь · {queue.length}</span><button type="button" onClick={clearQueue} className="text-xs text-white/60 hover:text-white">Очистить</button></div>
-          {queue.length ? queue.map((item, index) => <div key={item.id + index} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/10"><button type="button" onClick={() => void playTrack(item)} className="min-w-0 flex-1 truncate text-left text-sm">{index + 1}. {item.title} <span className="text-white/50">— {item.artist}</span></button><button type="button" onClick={() => removeFromQueue(item.id)} aria-label="Убрать из очереди" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white"><X size={13} /></button></div>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
+          {queue.length ? queue.map((item, index) => <div key={item.id} className="flex items-center gap-1 rounded-lg px-1 py-1.5 hover:bg-white/10"><span className="w-5 shrink-0 text-center text-xs text-white/45">{index + 1}</span><button type="button" onClick={() => void playTrack(item)} className="min-w-0 flex-1 truncate text-left text-sm">{item.title} <span className="text-white/50">— {item.artist}</span></button><div className="flex shrink-0 items-center"><button type="button" disabled={index===0} onClick={() => moveQueueItem(index,index-1)} aria-label={`Переместить ${item.title} выше`} title="Выше" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white disabled:opacity-20"><ArrowUp size={13}/></button><button type="button" disabled={index===queue.length-1} onClick={() => moveQueueItem(index,index+1)} aria-label={`Переместить ${item.title} ниже`} title="Ниже" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white disabled:opacity-20"><ArrowDown size={13}/></button><button type="button" onClick={() => removeFromQueue(item.id)} aria-label="Убрать из очереди" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white"><X size={13} /></button></div></div>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
         </div>
       )}
       {showLyrics && (
