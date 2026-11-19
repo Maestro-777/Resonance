@@ -79,7 +79,7 @@ function MediaCard({
   return (
     <Link to={to} className="cover-wrap lift group block">
       <div className={`cover-art ${ratio === 'wide' ? 'aspect-[4/3]' : 'aspect-square'}`}>
-        <img src={cover} alt={title} loading="lazy" />
+        <img src={cover} alt={title} loading="lazy" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} />
         <span className="cover-play" aria-hidden="true">
           <Play size={13} fill="currentColor" />
         </span>
@@ -778,7 +778,7 @@ export function Player() {
 
   return (
     <div className="reveal relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <img src={cover} alt="" className="ken-burns absolute inset-0 h-full w-full object-cover" />
+      <img src={cover} onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} alt="" className="ken-burns absolute inset-0 h-full w-full object-cover" />
       <div className="absolute inset-0 bg-[radial-gradient(90%_75%_at_50%_38%,rgba(122,44,204,0.38),transparent_70%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,4,14,0.74)_0%,rgba(7,4,14,0.4)_40%,rgba(5,3,10,0.94)_100%)]" />
 
