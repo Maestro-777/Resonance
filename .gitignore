@@ -1,0 +1,10 @@
+node_modules/
+dist/
+server/node_modules/
+server/.env
+server/.access-key.txt
+server/resonance-sync.json
+server/backups/
+*.log
+.DS_Store
+Thumbs.db
