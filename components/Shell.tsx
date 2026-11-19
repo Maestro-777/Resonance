@@ -52,7 +52,7 @@ export function Cover({
       className={`cover-art ${className}`}
       style={rounded ? { borderRadius: rounded } : undefined}
     >
-      <img src={src} alt={alt} loading="lazy" />
+      <img src={src} alt={alt} loading="lazy" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} />
     </div>
   )
 }
