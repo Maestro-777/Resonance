@@ -280,7 +280,7 @@ app.get('/api/backups', async (_req, res) => {
     for (const entry of entries) {
       if (!entry.isFile() || !/^[a-f0-9]{40}-\d+\.(mp3|flac|m4a|ogg|opus)$/.test(entry.name)) continue
       const stat = await fs.stat(path.join(BACKUP_DIR, entry.name))
-      backups.push({ id: entry.name.replace(/\.(mp3|flac|m4a|ogg|opus)$/i, ''), trackId: entry.name.split('-')[0], createdAt: new Date(stat.mtimeMs).toISOString(), size: stat.size })
+      backups.push({ id: entry.name.replace(/\.(mp3|flac|m4a|ogg|opus)$/i, ''), filename: entry.name, trackId: entry.name.split('-')[0], createdAt: new Date(stat.mtimeMs).toISOString(), size: stat.size })
     }
     backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     res.json({ backups })
