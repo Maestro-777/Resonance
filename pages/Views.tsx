@@ -878,6 +878,61 @@ export function Settings() {
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [editTrackId, setEditTrackId] = useState('')
+  const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
+  const [metadataMessage, setMetadataMessage] = useState('')
+  const [savingMetadata, setSavingMetadata] = useState(false)
+
+  useEffect(() => {
+    if (!editTrackId || !accessKey) return
+    let active = true
+    setMetadataMessage('')
+    void fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, { headers: { 'x-resonance-key': accessKey } })
+      .then(async response => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Не удалось прочитать теги')
+        if (active) setMetadata({ title: result.title || '', artist: result.artist || '', album: result.album || '', genre: result.genre || '', year: result.year ? String(result.year) : '', trackNumber: result.trackNumber ? String(result.trackNumber) : '' })
+      })
+      .catch(cause => { if (active) setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка чтения тегов') })
+    return () => { active = false }
+  }, [editTrackId, accessKey])
+
+  const saveTags = async () => {
+    if (!editTrackId) return
+    setSavingMetadata(true)
+    setMetadataMessage('')
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-resonance-key': accessKey },
+        body: JSON.stringify(metadata),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
+      await refreshLibrary()
+      setMetadataMessage('Теги сохранены. Резервная копия исходного файла создана.')
+    } catch (cause) {
+      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка записи тегов')
+    } finally {
+      setSavingMetadata(false)
+    }
+  }
+
+  const restoreTags = async () => {
+    if (!editTrackId) return
+    setSavingMetadata(true)
+    try {
+      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}/restore`, { method: 'POST', headers: { 'x-resonance-key': accessKey } })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить копию')
+      await refreshLibrary()
+      setMetadataMessage('Последняя резервная копия восстановлена.')
+    } catch (cause) {
+      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления')
+    } finally {
+      setSavingMetadata(false)
+    }
+  }
 
   return (
     <div className="fade-up">
@@ -936,6 +991,32 @@ export function Settings() {
         {serverMessage || error ? <p role="status" className="mt-3 text-sm text-[var(--r-text-dim)]">{serverMessage || error}</p> : null}
         {accessKey && !connected ? <p className="t-mute mt-2 text-xs">Ключ сохранён в этом браузере. Проверьте, что сервер запущен на этом компьютере.</p> : null}
       </section>
+
+      {connected ? (
+        <section className="panel mb-5 p-4 md:p-5">
+          <h2 className="text-base font-semibold">Редактор метаданных</h2>
+          <p className="t-dim mt-1 text-sm">Изменяйте название, исполнителя, альбом, жанр, год и номер дорожки. Перед записью сервер сохраняет оригинал.</p>
+          <select value={editTrackId} onChange={event => setEditTrackId(event.target.value)} aria-label="Трек для редактирования" className="mt-4 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
+            <option value="">Выберите трек</option>
+            {tracks.filter(track => ['MP3', 'FLAC', 'M4A', 'OGG', 'OPUS'].includes(track.format)).map(track => <option key={track.id} value={track.id}>{track.title} — {track.artist} ({track.format})</option>)}
+          </select>
+          {editTrackId ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {(['title', 'artist', 'album', 'genre', 'year', 'trackNumber'] as const).map(field => (
+                <label key={field} className="block">
+                  <span className="t-mute mb-1 block text-xs">{({ title: 'Название', artist: 'Исполнитель', album: 'Альбом', genre: 'Жанр', year: 'Год', trackNumber: 'Номер дорожки' })[field]}</span>
+                  <input value={metadata[field]} onChange={event => setMetadata(value => ({ ...value, [field]: event.target.value }))} className="h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]" />
+                </label>
+              ))}
+              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
+                <button type="button" disabled={savingMetadata} onClick={() => void saveTags()} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{savingMetadata ? 'Сохранение…' : 'Сохранить теги'}</button>
+                <button type="button" disabled={savingMetadata} onClick={() => void restoreTags()} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm disabled:opacity-50">Восстановить копию</button>
+              </div>
+            </div>
+          ) : null}
+          {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
+        </section>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="panel p-5 md:p-6">
