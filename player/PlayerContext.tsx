@@ -366,7 +366,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (active) setSyncLoaded(true)
     })
     return () => { active = false }
-  }, [connected, accessKey, tracks, isPlaying])
+  }, [connected, accessKey])
 
   useEffect(() => {
     if (!connected || !accessKey || !syncLoaded) return
