@@ -661,7 +661,6 @@ export function TrackMetadataEditor() {
   const { tracks, connected, accessKey, refreshLibrary } = usePlayer()
   const track = tracks.find(item => item.id === id)
   const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
-  const [coverData, setCoverData] = useState('')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const supported = track ? ['MP3','FLAC','M4A','OGG','OPUS'].includes(track.format) : false
@@ -743,8 +742,6 @@ export function Settings() {
   const [uploading, setUploading] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [metadataBackups, setMetadataBackups] = useState<MetadataBackup[]>([])
-  const [editTrackId, setEditTrackId] = useState('')
-  const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
@@ -784,59 +781,6 @@ export function Settings() {
       await refreshLibrary()
       await loadMetadataBackups()
       setMetadataMessage('Резервная копия восстановлена. Перед восстановлением создана копия текущего файла.')
-    } catch (cause) {
-      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления')
-    } finally {
-      setSavingMetadata(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!editTrackId || !accessKey) return
-    let active = true
-    setMetadataMessage('')
-    void fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, { headers: { 'x-resonance-key': accessKey } })
-      .then(async response => {
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'Не удалось прочитать теги')
-        if (active) setMetadata({ title: result.title || '', artist: result.artist || '', album: result.album || '', genre: result.genre || '', year: result.year ? String(result.year) : '', trackNumber: result.trackNumber ? String(result.trackNumber) : '' })
-      })
-      .catch(cause => { if (active) setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка чтения тегов') })
-    return () => { active = false }
-  }, [editTrackId, accessKey])
-
-  const saveTags = async () => {
-    if (!editTrackId) return
-    setSavingMetadata(true)
-    setMetadataMessage('')
-    try {
-      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-resonance-key': accessKey },
-        body: JSON.stringify(coverData ? { ...metadata, coverData } : metadata),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
-      await refreshLibrary()
-      await loadMetadataBackups()
-      setCoverData('')
-      setMetadataMessage('Теги сохранены. Резервная копия исходного файла создана.')
-    } catch (cause) {
-      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка записи тегов')
-    } finally {
-      setSavingMetadata(false)
-    }
-  }
-
-  const restoreTags = async () => {
-    if (!editTrackId) return
-    setSavingMetadata(true)
-    try {
-      const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}/restore`, { method: 'POST', headers: { 'x-resonance-key': accessKey } })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить копию')
-      await refreshLibrary()
-      setMetadataMessage('Последняя резервная копия восстановлена.')
     } catch (cause) {
       setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления')
     } finally {
@@ -1086,7 +1030,7 @@ export function About() {
           },
           {
             title: 'Статус',
-            text: 'Только фронтенд: воспроизведение и хранение музыки не подключены.',
+            text: 'Локальный музыкальный сервер, потоковое воспроизведение, очередь, избранное, плейлисты, эквалайзер и офлайн-загрузки.',
           },
         ].map((item) => (
           <div key={item.title} className="panel p-5">
@@ -1096,10 +1040,7 @@ export function About() {
         ))}
       </div>
 
-      <p className="t-mute mt-5 text-[0.72rem] leading-relaxed">
-        Демо-контент: названия треков, исполнителей и обложки используются как заполнители для
-        макета.
-      </p>
+      <p className="t-mute mt-5 text-[0.72rem] leading-relaxed">Музыка хранится на твоём компьютере. Resonance открывает её на других устройствах через защищённое соединение; пользовательские обложки и параметры интерфейса хранятся локально в браузере.</p>
 
       <Link
         to="/"
