@@ -102,3 +102,15 @@ test('sanitizeSyncState validates playback resume snapshots', async () => {
   assert.deepEqual(valid.playback, { trackId: 'track-1', position: 42.5, updatedAt: '2026-11-19T05:00:00.000Z' })
   assert.equal(sanitizeSyncState({ playback: { trackId: '../bad', position: -1 } }).playback, null)
 })
+
+test('sanitizeSyncState validates Resonance appearance preferences', async () => {
+  const { sanitizeSyncState } = await import('../lib/utils.js')
+  const valid = sanitizeSyncState({
+    appearance: { theme: 'oled', accent: '#8B5CF6', radius: 99, blur: -4, scale: 1.1, cols: 12, density: 'compact', glow: false, animations: true, labels: false },
+  })
+  assert.deepEqual(valid.appearance, {
+    theme: 'oled', accent: '#8b5cf6', radius: 28, blur: 0, scale: 1.1, cols: 8,
+    density: 'compact', glow: false, animations: true, labels: false,
+  })
+  assert.deepEqual(sanitizeSyncState({ appearance: { theme: 'invalid', accent: 'red', density: 'huge' } }).appearance, {})
+})
