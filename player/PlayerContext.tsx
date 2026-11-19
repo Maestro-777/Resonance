@@ -27,7 +27,7 @@ export type LibraryTrack = {
   hasEmbeddedPicture: boolean
 }
 
-type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
+type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null; root?: string }
 type RepeatMode = 'off' | 'all' | 'one'
 type PlaybackSnapshot = { trackId: string; position: number; updatedAt?: string | null }
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
@@ -177,7 +177,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     try {
       await request<{ ok: boolean }>('/api/auth/session', { method: 'POST' }, accessKey)
-      const result = await request<LibraryResponse>('/api/library', {}, accessKey)
+      let result = await request<LibraryResponse>('/api/library', {}, accessKey)
+      if (!result.lastScan) {
+        await request('/api/library/scan', { method: 'POST' }, accessKey)
+        result = await request<LibraryResponse>('/api/library', {}, accessKey)
+      }
       setTracks(result.tracks || [])
       setConnected(true)
       setError(null)
@@ -197,12 +201,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'x-resonance-key': clean },
     })
+    let result = await request<LibraryResponse>('/api/library', {}, clean)
+    if (!result.lastScan) {
+      await request('/api/library/scan', { method: 'POST' }, clean)
+      result = await request<LibraryResponse>('/api/library', {}, clean)
+    }
     localStorage.setItem(ACCESS_KEY, clean)
     setAccessKeyState(clean)
-    setError(null)
-    const result = await request<LibraryResponse>('/api/library', {}, clean)
     setTracks(result.tracks || [])
     setConnected(true)
+    setError(null)
   }, [])
 
   const disconnect = useCallback(() => {

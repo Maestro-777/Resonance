@@ -25,19 +25,9 @@ import {
   X,
 } from 'lucide-react'
 import {
-  albums,
-  artists,
-  covers,
-  heroSlides,
-  libraryFilters,
-  nowPlaying,
-  playlists,
-  recentlyPlayed,
-  type Album,
-  type Track,
 } from '@/data'
 import { AppearanceControls, useAppearance } from '@/theme'
-import { Cover, LibraryTiles, SectionHeader } from '@/components/Shell'
+import { Cover, SectionHeader } from '@/components/Shell'
 import { formatTime, usePlayer, type LibraryTrack } from '@/player/PlayerContext'
 import { deleteOfflineTrack, listOfflineTracks, saveOfflineTrack, type OfflineTrackRecord } from '@/lib/offline'
 
@@ -106,115 +96,6 @@ function makeSlug(value: string) {
   return value.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '')
 }
 
-function durationMinutes(tracks: Track[]) {
-  const seconds = tracks.reduce((total, track) => {
-    const [minutes = 0, secs = 0] = track.duration.split(':').map(Number)
-    return total + minutes * 60 + secs
-  }, 0)
-  return Math.round(seconds / 60)
-}
-
-function TrackList({
-  items,
-  activeIndex = 1,
-  withCover = false,
-  showArtist = true,
-}: {
-  items: { title: string; artist?: string; duration: string; cover: string }[]
-  activeIndex?: number
-  withCover?: boolean
-  showArtist?: boolean
-}) {
-  const [liked, setLiked] = useState<number[]>([])
-  const toggleLike = (index: number) =>
-    setLiked((prev) => (prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]))
-
-  return (
-    <div className="overflow-hidden">
-      {items.map((item, index) => {
-        const active = index === activeIndex
-        return (
-          <div
-            key={`${item.title}-${index}`}
-            className={`group grid items-center gap-3 rounded-[calc(var(--r-radius)*0.7)] px-2.5 py-2.5 transition-colors md:px-3 ${
-              withCover
-                ? 'grid-cols-[1.6rem_2.4rem_minmax(0,1fr)_auto_auto_auto]'
-                : 'grid-cols-[1.6rem_minmax(0,1fr)_auto_auto_auto]'
-            } ${active ? 'bg-[var(--r-panel-2)]' : 'hover:bg-[var(--r-panel)]'}`}
-          >
-            <span
-              className={`text-center text-[0.76rem] tabular-nums ${
-                active ? 'accent-text' : 't-mute'
-              }`}
-            >
-              {active ? (
-                <span className="inline-flex h-3 items-end gap-[2px]" aria-label="Играет">
-                  <span className="eq-bar accent-grad h-full w-[2px] rounded-full" />
-                  <span
-                    className="eq-bar accent-grad h-full w-[2px] rounded-full"
-                    style={{ animationDelay: '0.2s' }}
-                  />
-                  <span
-                    className="eq-bar accent-grad h-full w-[2px] rounded-full"
-                    style={{ animationDelay: '0.4s' }}
-                  />
-                </span>
-              ) : (
-                index + 1
-              )}
-            </span>
-
-            {withCover ? (
-              <img
-                src={item.cover}
-                alt=""
-                className="h-9 w-9 rounded-lg object-cover"
-                loading="lazy"
-              />
-            ) : null}
-
-            <div className="min-w-0">
-              <p
-                className={`truncate text-[0.86rem] font-medium ${
-                  active ? 'accent-text' : 'text-[var(--r-text)]'
-                }`}
-              >
-                {item.title}
-              </p>
-              {showArtist && item.artist ? (
-                <p className="t-mute truncate text-[0.72rem]">{item.artist}</p>
-              ) : null}
-            </div>
-
-            <span className="t-mute text-[0.75rem] tabular-nums">{item.duration}</span>
-
-            <button
-              type="button"
-              onClick={() => toggleLike(index)}
-              aria-label={liked.includes(index) ? 'Убрать из избранного' : 'В избранное'}
-              aria-pressed={liked.includes(index)}
-              className={`grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-[var(--r-panel-2)] ${
-                liked.includes(index)
-                  ? 'text-[var(--r-accent)]'
-                  : 'text-[var(--r-text-mute)] opacity-0 group-hover:opacity-100'
-              }`}
-            >
-              <Heart size={15} fill={liked.includes(index) ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              type="button"
-              aria-label={`Ещё: ${item.title}`}
-              className="grid h-8 w-8 place-items-center rounded-full text-[var(--r-text-mute)] transition-colors hover:bg-[var(--r-panel-2)] hover:text-[var(--r-text)]"
-            >
-              <MoreHorizontal size={15} />
-            </button>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
   const { currentTrack, isPlaying, playTrack, togglePlay, toggleFavorite, favorites, addToQueue } = usePlayer()
   if (!items.length) return <p className="t-dim rounded-xl border border-dashed border-[var(--r-line)] p-5 text-sm">В музыкальной папке пока не найдено аудиофайлов. Проверьте путь MUSIC_ROOT и запустите сканирование в настройках.</p>
@@ -246,147 +127,41 @@ function ServerTrackRows({ items }: { items: LibraryTrack[] }) {
 /* ================================================================== */
 
 function Hero() {
-  const [index, setIndex] = useState(0)
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setIndex((value) => (value + 1) % heroSlides.length)
-    }, 8000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const slide = heroSlides[index]
-
+  const { tracks, connected, loading } = usePlayer()
+  const albumCount = new Set(tracks.filter(track => track.album && track.album !== 'Без альбома').map(track => `${track.album}__${track.albumArtist || track.artist}`)).size
+  const artistCount = new Set(tracks.map(track => track.albumArtist || track.artist).filter(name => name && name !== 'Неизвестный исполнитель')).size
   return (
-    <section className="relative overflow-hidden rounded-[var(--r-radius)] border border-[var(--r-line)]">
-      <div className="absolute inset-0">
-        {heroSlides.map((item, itemIndex) => (
-          <div
-            key={item.id}
-            aria-hidden={itemIndex !== index}
-            className={`absolute inset-0 transition-opacity duration-[1100ms] ease-out ${
-              itemIndex === index ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            <img
-              src={item.cover}
-              alt=""
-              className={`h-full w-full object-cover transition-transform ease-out duration-[8000ms] ${
-                itemIndex === index ? 'scale-105' : 'scale-100'
-              }`}
-            />
-          </div>
-        ))}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,4,14,0.94)_0%,rgba(8,5,18,0.72)_46%,rgba(8,5,18,0.25)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(6,4,14,0.85)_0%,transparent_60%)]" />
-      </div>
-
-      <div className="relative flex min-h-[13.5rem] flex-col justify-end px-5 pb-10 pt-6 md:min-h-[16rem] md:justify-center md:px-9 md:py-8">
-        <h2 className="text-[1.6rem] font-bold leading-[1.05] tracking-[-0.03em] md:text-[3.1rem]">
-          {slide.title}
-        </h2>
-        <p className="t-dim mt-2 max-w-[26rem] text-[0.88rem] md:text-[1.02rem]">
-          {slide.subtitle}
-        </p>
-
-        <div className="mt-5 flex items-center gap-2.5">
-          <Link
-            to="/player"
-            className="accent-btn accent-ring inline-flex h-10 items-center gap-2 rounded-full px-5 text-[0.85rem] font-semibold transition-transform hover:scale-[1.03] md:h-11 md:px-6"
-          >
-            <Play size={15} fill="currentColor" />
-            Слушать
-          </Link>
-          <Link
-            to="/about"
-            aria-label="О приложении"
-            className="glass accent-ring grid h-10 w-10 place-items-center rounded-full text-white/90 transition-colors hover:text-white md:h-11 md:w-11"
-          >
-            <Info size={17} />
-          </Link>
-        </div>
-      </div>
-
-      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 md:bottom-6 md:left-auto md:right-7 md:translate-x-0">
-        {heroSlides.map((item, itemIndex) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setIndex(itemIndex)}
-            aria-label={`Слайд ${itemIndex + 1}: ${item.title}`}
-            aria-current={itemIndex === index}
-            className={`h-1.5 rounded-full transition-all ${
-              itemIndex === index
-                ? 'w-5 bg-[var(--r-accent)]'
-                : 'w-1.5 bg-white/35 hover:bg-white/60'
-            }`}
-          />
-        ))}
+    <section className="panel relative overflow-hidden p-6 md:p-9">
+      <div className="accent-grad absolute -right-16 -top-24 h-64 w-64 rounded-full opacity-15 blur-3xl" />
+      <div className="relative">
+        <p className="t-mute text-xs uppercase tracking-[0.18em]">Resonance · твоя музыкальная библиотека</p>
+        <h1 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight md:text-5xl">{connected ? 'Вся твоя музыка — в одном месте' : 'Подключи свою музыкальную коллекцию'}</h1>
+        <p className="t-dim mt-3 max-w-xl text-sm md:text-base">{connected ? `${tracks.length} треков · ${albumCount} альбомов · ${artistCount} исполнителей` : 'Resonance покажет только настоящие аудиофайлы из выбранной папки на твоём компьютере. Демо-музыки здесь больше нет.'}</p>
+        {!connected ? <Link to="/settings" className="accent-btn mt-5 inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold">Подключить музыкальный сервер</Link> : <Link to="/library" className="accent-btn mt-5 inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold">Открыть библиотеку</Link>}
+        {loading ? <p className="t-mute mt-3 text-xs">Подключение к серверу…</p> : null}
       </div>
     </section>
   )
 }
 
 export function Home() {
-  const { tracks, connected, history } = usePlayer()
-  const recentServerTracks = (history.length ? history : tracks.map(track => track.id)).map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track)).slice(0, 6)
+  const { tracks, connected, history, playlists: userPlaylists } = usePlayer()
+  const recent = (history.length ? history : tracks.map(track => track.id)).map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track)).slice(0, 8)
+  const albumCount = new Set(tracks.map(track => `${track.album}__${track.albumArtist || track.artist}`)).size
+  const artistCount = new Set(tracks.map(track => track.albumArtist || track.artist)).size
   return (
     <div className="fade-up space-y-8">
       <Hero />
-
-      {connected ? (
+      {connected ? <>
         <section>
-          <SectionHeader title="Ваша музыка" to="/library" actionLabel="Вся библиотека" />
-          <ServerTrackRows items={recentServerTracks} />
+          <SectionHeader title="Твоя музыка" to="/library" actionLabel="Вся библиотека" />
+          {recent.length ? <ServerTrackRows items={recent} /> : <p className="t-dim text-sm">Библиотека подключена. Запусти любой трек, и здесь появится история прослушивания.</p>}
         </section>
-      ) : null}
-
-      <section>
-        <SectionHeader title="Недавно прослушанные" to="/history" />
-        <div className="media-grid row-mobile">
-          {recentlyPlayed.map((item) => (
-            <MediaCard
-              key={item.title}
-              title={item.title}
-              subtitle={item.artist}
-              cover={item.cover}
-              to={`/albums/${item.albumId}`}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader title="Моя библиотека" to="/library" actionLabel="Все разделы" />
-        <LibraryTiles />
-      </section>
-
-      <section>
-        <SectionHeader title="Плейлисты" to="/playlists" actionLabel="Все плейлисты" />
-        <div className="media-grid">
-          {playlists.slice(0, 5).map((playlist) => (
-            <Link key={playlist.id} to="/player" className="cover-wrap group block">
-              <div className="cover-art aspect-square">
-                {playlist.cover ? (
-                  <img src={playlist.cover} alt={playlist.title} loading="lazy" />
-                ) : (
-                  <div
-                    className="flex h-full w-full items-center justify-center"
-                    style={{ background: playlist.gradient }}
-                  >
-                    <Star size={38} className="text-white/90" fill="currentColor" />
-                  </div>
-                )}
-                <span className="cover-play" aria-hidden="true">
-                  <Play size={13} fill="currentColor" />
-                </span>
-              </div>
-              <p className="mt-2.5 truncate text-[0.86rem] font-medium">{playlist.title}</p>
-              <p className="t-mute truncate text-[0.74rem]">{playlist.count}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[['Треки', tracks.length, '/library'], ['Альбомы', albumCount, '/albums'], ['Исполнители', artistCount, '/artists']].map(([label, count, to]) => <Link key={label} to={String(to)} className="panel panel-hover p-4"><p className="t-mute text-xs">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{count}</p></Link>)}
+        </section>
+        {userPlaylists.length ? <section><SectionHeader title="Твои плейлисты" to="/playlists" actionLabel="Все плейлисты" /><div className="grid gap-3 sm:grid-cols-2">{userPlaylists.slice(0, 4).map(playlist => <Link key={playlist.id} to="/playlists" className="panel panel-hover p-4"><p className="font-medium">{playlist.name}</p><p className="t-mute mt-1 text-xs">{playlist.trackIds.length} треков</p></Link>)}</div></section> : null}
+      </> : <section className="panel p-5"><h2 className="font-semibold">Пока нет подключённой библиотеки</h2><p className="t-dim mt-2 text-sm">Вымышленные альбомы и треки не отображаются. Подключи локальный сервер и просканируй папку с музыкой.</p><Link to="/settings" className="accent-text mt-3 inline-flex text-sm font-medium">Перейти к настройке сервера →</Link></section>}
     </div>
   )
 }
@@ -396,7 +171,6 @@ export function Home() {
 /* ================================================================== */
 
 export function Library() {
-  const [filter, setFilter] = useState<string>(libraryFilters[0])
   const [sort, setSort] = useState('default')
   const { tracks, connected } = usePlayer()
   const [searchParams] = useSearchParams()
@@ -429,27 +203,6 @@ export function Library() {
         </label>
       </PageHead>
 
-      <div className="no-scrollbar mb-6 flex gap-2 overflow-x-auto">
-        {libraryFilters.map((item) => {
-          const active = item === filter
-          return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              aria-pressed={active}
-              className={`accent-ring whitespace-nowrap rounded-full px-4 py-2 text-[0.8rem] font-medium transition-colors ${
-                active
-                  ? 'accent-grad text-white accent-shadow'
-                  : 'border border-[var(--r-line-2)] text-[var(--r-text)] hover:bg-[var(--r-panel)]'
-              }`}
-            >
-              {item}
-            </button>
-          )
-        })}
-      </div>
-
       {connected ? (
         <section className="panel mb-8 p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -468,40 +221,7 @@ export function Library() {
         </div>
       )}
 
-      <div className="mb-8">
-        <LibraryTiles />
-      </div>
-
-      <section className="mb-8">
-        <SectionHeader title="Недавно добавленные" to="/history" />
-        <div className="media-grid row-mobile">
-          {recentlyPlayed.map((item) => (
-            <MediaCard
-              key={item.title}
-              title={item.title}
-              subtitle={item.artist}
-              cover={item.cover}
-              to={`/albums/${item.albumId}`}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader title="Альбомы" to="/albums" actionLabel="Все альбомы" />
-        <div className="media-grid">
-          {albums.slice(0, 5).map((album) => (
-            <MediaCard
-              key={album.id}
-              title={album.title}
-              subtitle={album.artist}
-              cover={album.cover}
-              to={`/albums/${album.id}`}
-              ratio="square"
-            />
-          ))}
-        </div>
-      </section>
+      {connected ? <p className="t-mute text-xs">Показаны только файлы, найденные при последнем сканировании музыкальной папки.</p> : null}
     </div>
   )
 }
@@ -512,7 +232,7 @@ export function Library() {
 
 export function Albums() {
   const { tracks, connected } = usePlayer()
-  const serverAlbums = Array.from(tracks.reduce((map, track) => {
+  const serverAlbums = Array.from(tracks.filter(track => track.album && track.album !== 'Без альбома').reduce((map, track) => {
     const key = `${track.album}__${track.albumArtist || track.artist}`
     const current = map.get(key) || []
     current.push(track)
@@ -522,7 +242,7 @@ export function Albums() {
   return (
     <div className="fade-up">
       <PageHead title="Альбомы" subtitle={connected ? `${serverAlbums.length} альбомов в вашей библиотеке` : 'Коллекции треков из вашей библиотеки'} />
-      {connected ? <div className="media-grid">{serverAlbums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div> : <div className="media-grid">{albums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div>}
+      {connected ? (serverAlbums.length ? <div className="media-grid">{serverAlbums.map(album => <MediaCard key={album.id} title={album.title} subtitle={`${album.artist} · ${album.year || 'год неизвестен'}`} cover={album.cover} to={`/albums/${album.id}`} ratio="square" />)}</div> : <p className="t-dim text-sm">В просканированной папке пока не найдено альбомов.</p>) : <p className="t-dim text-sm">Подключи сервер, чтобы увидеть реальные альбомы. Демонстрационные записи скрыты.</p>}
     </div>
   )
 }
@@ -531,10 +251,9 @@ export function AlbumDetail() {
   const { id } = useParams()
   const { tracks, connected, playTrack } = usePlayer()
   const serverTracks = tracks.filter(track => makeSlug(`${track.album}__${track.albumArtist || track.artist}`) === id)
-  const demoAlbum: Album = albums.find(item => item.id === id) ?? albums[0]
-  const albumTitle = serverTracks[0]?.album || demoAlbum.title
-  const albumArtist = serverTracks[0]?.albumArtist || serverTracks[0]?.artist || demoAlbum.artist
-  const cover = serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : demoAlbum.cover
+  const albumTitle = serverTracks[0]?.album || 'Альбом не найден'
+  const albumArtist = serverTracks[0]?.albumArtist || serverTracks[0]?.artist || ''
+  const cover = serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : '/cover-fallback.svg'
 
   return (
     <div className="fade-up">
@@ -548,11 +267,11 @@ export function AlbumDetail() {
           <p className="t-mute text-[0.68rem] uppercase tracking-[0.16em]">Альбом</p>
           <h1 className="mt-1.5 text-[1.7rem] font-semibold leading-tight tracking-[-0.02em] md:text-[2.2rem]">{albumTitle}</h1>
           <p className="t-dim mt-1 text-[0.9rem]">{albumArtist}</p>
-          <p className="t-mute mt-2 text-[0.76rem]">{serverTracks.length ? `${serverTracks[0].year || 'Год неизвестен'} · ${serverTracks.length} треков` : `${demoAlbum.year} · ${demoAlbum.tracks.length} треков · ${durationMinutes(demoAlbum.tracks)} мин`}</p>
+          <p className="t-mute mt-2 text-[0.76rem]">{serverTracks.length ? `${serverTracks[0].year || 'Год неизвестен'} · ${serverTracks.length} треков` : 'Нет данных из музыкального сервера'}</p>
           <button type="button" disabled={!serverTracks.length} onClick={() => void playTrack(serverTracks[0])} className="accent-btn accent-ring mt-4 inline-flex h-10 items-center gap-2 rounded-full px-5 text-[0.84rem] font-semibold disabled:opacity-40"><Play size={15} fill="currentColor" />Слушать альбом</button>
         </div>
       </div>
-      {serverTracks.length ? <ServerTrackRows items={serverTracks} /> : connected ? <p className="t-dim">Альбом не найден в текущей библиотеке.</p> : <TrackList items={demoAlbum.tracks.map(track => ({ ...track, artist: demoAlbum.artist }))} showArtist={false} />}
+      {serverTracks.length ? <ServerTrackRows items={serverTracks} /> : <p className="t-dim">{connected ? 'Альбом не найден в текущей библиотеке.' : 'Подключи сервер, чтобы просматривать реальные альбомы.'}</p>}
     </div>
   )
 }
@@ -563,28 +282,28 @@ export function AlbumDetail() {
 
 export function Artists() {
   const { tracks, connected } = usePlayer()
-  const serverArtists = Array.from(tracks.reduce((map, track) => {
+  const serverArtists = Array.from(tracks.filter(track => (track.albumArtist || track.artist) !== 'Неизвестный исполнитель').reduce((map, track) => {
     const name = track.albumArtist || track.artist
     const current = map.get(name) || []
     current.push(track)
     map.set(name, current)
     return map
   }, new Map<string, LibraryTrack[]>()), ([name, items]) => ({ id: makeSlug(name), name, count: items.length, cover: `/api/cover/${encodeURIComponent(items[0].id)}` }))
-  const list = connected ? serverArtists : artists.map(item => ({ ...item, count: 0 }))
+  const list = connected ? serverArtists : []
   return (
     <div className="fade-up">
-      <PageHead title="Исполнители" subtitle={connected ? `${list.length} исполнителей в вашей коллекции` : 'Все артисты вашей коллекции'} />
-      <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
+      <PageHead title="Исполнители" subtitle={connected ? `${list.length} исполнителей в вашей коллекции` : 'Подключи сервер, чтобы увидеть исполнителей из своих аудиофайлов'} />
+      {list.length ? <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
         {list.map(artist => (
           <Link key={artist.id} to={connected ? `/artists/${artist.id}` : "/albums"} className="group block text-center">
             <div className="mx-auto aspect-square w-full overflow-hidden rounded-full border border-[var(--r-line)] transition-transform duration-500 group-hover:scale-[1.03]">
-              <img src={artist.cover} alt={artist.name} loading="lazy" onError={event => { event.currentTarget.src = covers.mountains }} className="h-full w-full object-cover" />
+              <img src={artist.cover} alt={artist.name} loading="lazy" onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} className="h-full w-full object-cover" />
             </div>
             <p className="mt-3 truncate text-[0.88rem] font-medium">{artist.name}</p>
             <p className="t-mute text-[0.72rem]">{connected ? `${artist.count} треков` : 'Исполнитель'}</p>
           </Link>
         ))}
-      </div>
+      </div> : <p className="t-dim text-sm">{connected ? 'Исполнители не найдены.' : 'Демонстрационные исполнители скрыты.'}</p>}
     </div>
   )
 }
@@ -593,12 +312,12 @@ export function ArtistDetail() {
   const { id } = useParams()
   const { tracks, connected } = usePlayer()
   const items = tracks.filter(track => makeSlug(track.albumArtist || track.artist) === id)
-  const name = items[0]?.albumArtist || items[0]?.artist || artists.find(item => item.id === id)?.name || 'Исполнитель'
+  const name = items[0]?.albumArtist || items[0]?.artist || 'Исполнитель'
   return (
     <div className="fade-up">
       <Link to="/artists" className="t-dim mb-5 inline-flex items-center gap-1.5 text-[0.8rem] font-medium hover:text-[var(--r-text)]"><ArrowLeft size={15} />Исполнители</Link>
-      <PageHead title={name} subtitle={connected ? `${items.length} треков в библиотеке` : 'Исполнитель'} />
-      {items.length ? <ServerTrackRows items={items} /> : <p className="t-dim">Треки этого исполнителя пока не найдены.</p>}
+      <PageHead title={name} subtitle={connected ? `${items.length} треков в библиотеке` : 'Подключи сервер для просмотра музыки'} />
+      {items.length ? <ServerTrackRows items={items} /> : <p className="t-dim">{connected ? 'Треки этого исполнителя пока не найдены.' : 'Данные исполнителей появятся после подключения сервера.'}</p>}
     </div>
   )
 }
@@ -655,19 +374,7 @@ export function Playlists() {
           </div>
         </section>
       ) : null}
-      <h2 className="mb-4 text-base font-semibold">Подборки Resonance</h2>
-      <div className="media-grid">
-        {playlists.map(playlist => (
-          <Link key={playlist.id} to="/player" className="cover-wrap group block">
-            <div className="cover-art aspect-square">
-              {playlist.cover ? <img src={playlist.cover} alt={playlist.title} loading="lazy" /> : <div className="flex h-full w-full items-center justify-center" style={{ background: playlist.gradient }}><Star size={40} className="text-white/90" fill="currentColor" /></div>}
-              <span className="cover-play" aria-hidden="true"><Play size={13} fill="currentColor" /></span>
-            </div>
-            <p className="mt-2.5 truncate text-[0.86rem] font-medium">{playlist.title}</p>
-            <p className="t-mute truncate text-[0.74rem]">{playlist.count}</p>
-          </Link>
-        ))}
-      </div>
+
     </div>
   )
 }
@@ -675,10 +382,6 @@ export function Playlists() {
 /* ================================================================== */
 /*  Избранное / История / Офлайн                                       */
 /* ================================================================== */
-
-const flatTracks = albums.flatMap((album) =>
-  album.tracks.map((track) => ({ ...track, artist: album.artist })),
-)
 
 export function Favorites() {
   const { tracks, favorites, playTrack } = usePlayer()
@@ -830,7 +533,7 @@ export function Player() {
   const activeLyricIndex = timedLyrics.findIndex((line, index) => currentTime >= line.time && (index === timedLyrics.length - 1 || currentTime < timedLyrics[index + 1].time))
   const bars = Math.round(liveBars.length * progress)
   const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
-  const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : covers.mountains
+  const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : '/cover-fallback.svg'
 
   return (
     <div className="reveal relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -914,7 +617,7 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, disconnect, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds, exportData, importData } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, disconnect, loading, tracks, currentTrack, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds, exportData, importData } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -925,6 +628,7 @@ export function Settings() {
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
+  const [serverHealth, setServerHealth] = useState<{ trackCount?: number; lastScan?: string | null } | null>(null)
 
   const loadMetadataBackups = async () => {
     if (!connected || !accessKey) return
@@ -937,6 +641,15 @@ export function Settings() {
       setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки резервных копий')
     }
   }
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/health', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(value => { if (active) setServerHealth(value) })
+      .catch(() => { if (active) setServerHealth(null) })
+    return () => { active = false }
+  }, [connected, loading]) 
 
   useEffect(() => {
     void loadMetadataBackups()
@@ -1033,13 +746,14 @@ export function Settings() {
               <h2 className="text-base font-semibold">Музыкальный сервер</h2>
               <span className={`rounded-full px-2.5 py-1 text-[0.68rem] ${connected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--r-panel-2)] t-dim'}`}>{connected ? 'Подключён' : 'Не подключён'}</span>
             </div>
-            <p className="t-dim mt-1 text-sm">Сервер читает вашу папку с музыкой на компьютере. Введите ключ из server/.env, чтобы загрузить библиотеку.</p>
-            {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} треков доступны для воспроизведения</p> : null}
+            <p className="t-dim mt-1 text-sm">Сервер читает реальные аудиофайлы с компьютера. Ключ находится в файле <code>server/.env</code>; в Windows его можно открыть кнопкой «Где взять ключ?» ниже.</p>
+            <p className="t-mute mt-2 text-xs">{serverHealth ? `Локальный API доступен · в индексе сервера: ${serverHealth.trackCount ?? 0} треков` : 'Локальный API не отвечает. Проверь, что запущен 2-ЗАПУСТИТЬ.bat.'}</p>
+            {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} реальных треков загружено в библиотеку</p> : null}
           </div>
           {connected ? (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={disconnect} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">Отключить сервер</button>
-              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование…' : 'Сканировать папку'}</button>
+              <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено. Список треков обновлён.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование папки…' : 'Обновить мои треки'}</button>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--r-panel-2)]">
                 {uploading ? 'Загрузка…' : 'Загрузить музыку'}
                 <input type="file" accept="audio/*,.flac,.opus,.aiff" multiple disabled={uploading} className="sr-only" onChange={event => {
@@ -1060,12 +774,14 @@ export function Settings() {
             </div>
           ) : null}
         </div>
+        {!connected ? <div className="mt-3"><p className="text-xs t-mute">Открой файл server/.env в папке Resonance на компьютере. Нужна строка RESONANCE_ACCESS_KEY=…</p></div> : null}
         {!connected ? (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <input type="password" autoComplete="current-password" value={serverKey} onChange={event => setServerKey(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) } }} placeholder="Ключ доступа Resonance" aria-label="Ключ доступа сервера" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
             <button type="button" disabled={!serverKey.trim() || loading} onClick={() => { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) }} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">Подключить</button>
           </div>
         ) : null}
+        {!connected ? <p className="mt-3 text-xs t-mute">После установки нажми «Где взять ключ?», скопируй значение RESONANCE_ACCESS_KEY из server/.env, вставь его сюда и нажми «Подключить».</p> : null}
         {serverMessage || error ? <p role="status" className="mt-3 text-sm text-[var(--r-text-dim)]">{serverMessage || error}</p> : null}
         {accessKey && !connected ? <p className="t-mute mt-2 text-xs">Ключ сохранён в этом браузере. Проверьте, что сервер запущен на этом компьютере.</p> : null}
       </section>
@@ -1198,13 +914,13 @@ export function Settings() {
             <div className="glass rounded-[calc(var(--r-radius)*0.9)] p-3">
               <div className="flex items-center gap-3">
                 <img
-                  src={covers.ocean}
-                  alt="Обложка трека в предпросмотре"
+                  src={currentTrack ? `/api/cover/${encodeURIComponent(currentTrack.id)}` : '/cover-fallback.svg'}
+                  alt={currentTrack ? `Обложка ${currentTrack.title}` : "Нет выбранного трека"}
                   className="h-12 w-12 rounded-[calc(var(--r-radius)*0.5)] object-cover"
                 />
                 <div className="min-w-0">
-                  <p className="truncate text-[0.84rem] font-medium">Ocean Breath</p>
-                  <p className="t-mute truncate text-[0.7rem]">Deep Sound</p>
+                  <p className="truncate text-[0.84rem] font-medium">{currentTrack?.title || 'Название трека'}</p>
+                  <p className="t-mute truncate text-[0.7rem]">{currentTrack?.artist || 'Исполнитель'}</p>
                 </div>
               </div>
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/12">

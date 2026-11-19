@@ -22,13 +22,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import {
-  covers,
-  libraryTiles,
-  mainNav,
-  secondaryNav,
-  type LibraryTile,
-} from '@/data'
+import { mainNav, secondaryNav } from '@/data'
 import { AppearancePanel, useAppearance, type ThemeId } from '@/theme'
 import { formatTime, usePlayer } from '@/player/PlayerContext'
 
@@ -81,46 +75,6 @@ export function SectionHeader({
           />
         </Link>
       ) : null}
-    </div>
-  )
-}
-
-const tileIcons = {
-  heart: Heart,
-  clock: Clock,
-  music: Music2,
-  download: Download,
-}
-
-export function LibraryTiles({ tiles = libraryTiles }: { tiles?: LibraryTile[] }) {
-  return (
-    <div className="tiles-grid stagger">
-      {tiles.map((tile) => {
-        const Icon = tileIcons[tile.icon]
-        return (
-          <Link
-            key={tile.label}
-            to={tile.to}
-            className="panel panel-hover lift tile group flex items-center gap-3 p-3.5"
-          >
-            <span
-              className="tile-icon grid h-11 w-11 flex-none place-items-center rounded-xl"
-              style={{
-                background: `${tile.color}26`,
-                boxShadow: `0 10px 26px -18px ${tile.glow}`,
-              }}
-            >
-              <Icon size={19} style={{ color: tile.color }} />
-            </span>
-            <span className="min-w-0">
-              <span className="tile-label block truncate text-[0.9rem] font-medium">
-                {tile.label}
-              </span>
-              <span className="tile-count t-mute block truncate text-[0.74rem]">{tile.count}</span>
-            </span>
-          </Link>
-        )
-      })}
     </div>
   )
 }
@@ -317,7 +271,7 @@ function Topbar() {
           aria-label="Профиль слушателя"
           className="accent-ring ml-0.5 h-9 w-9 overflow-hidden rounded-full border border-[var(--r-line-2)] transition-transform hover:scale-105"
         >
-          <img src={covers.portrait} alt="Аватар слушателя" className="h-full w-full object-cover" />
+          <AudioLines size={18} className="mx-auto mt-2 text-[var(--r-accent)]" />
         </button>
       </div>
     </header>
