@@ -788,13 +788,29 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error, getSpectrum,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
   const [lyrics, setLyrics] = useState<string | null>(null)
   const [showLyrics, setShowLyrics] = useState(false)
   const [showQueue, setShowQueue] = useState(false)
+  const [liveBars, setLiveBars] = useState<number[]>(waveHeights)
+  useEffect(() => {
+    if (!isPlaying) { setLiveBars(waveHeights); return }
+    let frame = 0
+    let lastUpdate = 0
+    const draw = (now: number) => {
+      if (now - lastUpdate >= 90) {
+        const values = getSpectrum()
+        if (values.length) setLiveBars(values)
+        lastUpdate = now
+      }
+      frame = window.requestAnimationFrame(draw)
+    }
+    frame = window.requestAnimationFrame(draw)
+    return () => window.cancelAnimationFrame(frame)
+  }, [getSpectrum, isPlaying])
   useEffect(() => {
     let active = true
     setLyrics(null)
@@ -810,7 +826,7 @@ export function Player() {
   const progress = duration > 0 ? currentTime / duration : 0
   const timedLyrics = lyrics ? parseLrc(lyrics) : []
   const activeLyricIndex = timedLyrics.findIndex((line, index) => currentTime >= line.time && (index === timedLyrics.length - 1 || currentTime < timedLyrics[index + 1].time))
-  const bars = Math.round(waveHeights.length * progress)
+  const bars = Math.round(liveBars.length * progress)
   const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
   const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : covers.mountains
 
@@ -835,7 +851,7 @@ export function Player() {
         {error ? <p role="status" className="mt-2 text-xs text-rose-200/90">{error}</p> : null}
 
         <div className="mt-6 flex h-12 w-full max-w-[34rem] items-end justify-center gap-[3px] md:mt-8 md:h-20" aria-hidden="true">
-          {waveHeights.map((height, index) => <span key={index} className={`flex-1 rounded-full transition-colors ${index < bars ? 'accent-grad' : 'bg-white/15'} ${isPlaying ? 'wave-bar' : ''}`} style={{ height: `${height}%`, animationDelay: `${(index % 12) * 70}ms`, animationDuration: `${1 + (index % 5) * 0.16}s` }} />)}
+          {liveBars.map((height, index) => <span key={index} className={`flex-1 rounded-full transition-colors ${index < bars ? 'accent-grad' : 'bg-white/15'} ${isPlaying ? 'wave-bar' : ''}`} style={{ height: `${height}%`, animationDelay: `${(index % 12) * 70}ms`, animationDuration: `${1 + (index % 5) * 0.16}s` }} />)}
         </div>
 
         <div className="mt-5 w-full max-w-[34rem]">
