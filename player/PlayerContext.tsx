@@ -160,7 +160,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => { const value = Number(localStorage.getItem(VOLUME_KEY)); return Number.isFinite(value) && localStorage.getItem(VOLUME_KEY) !== null ? Math.max(0, Math.min(1, value)) : 0.72 })
   const [shuffle, setShuffle] = useState(() => localStorage.getItem(SHUFFLE_KEY) === 'true')
-  const [repeat, setRepeat] = useState<RepeatMode>(() => { const value = localStorage.getItem(REPEAT_KEY); return value === 'off' || value === 'one' || value === 'all' ? value : 'all' })
+  const [repeat, setRepeat] = useState<RepeatMode>(() => { const value = localStorage.getItem(REPEAT_KEY); return value === 'one' ? 'one' : 'all' })
   const [sleepTimer, setSleepTimerState] = useState<number | null>(null)
   const [crossfadeSeconds, setCrossfadeSecondsState] = useState(() => Math.max(0, Math.min(8, Number(localStorage.getItem(CROSSFADE_KEY) ?? 4) || 0)) )
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
