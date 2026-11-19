@@ -21,7 +21,8 @@ if ($content -notmatch '(?m)^RESONANCE_ACCESS_KEY=\S+') {
   } else {
     $content += "`r`nRESONANCE_ACCESS_KEY=$key`r`n"
   }
-  Set-Content -Path $envFile -Value $content -NoNewline
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($envFile, $content, $utf8)
   Write-Host 'Generated a private Resonance access key in server/.env.'
 }
 Write-Host 'Setup complete. Keep server/.env private.'
