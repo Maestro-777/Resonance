@@ -443,6 +443,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playOfflineTrack = useCallback(async (track: LibraryTrack, blob: Blob) => {
     const audio = audioRef.current
     if (!audio) return
+    if (transitionTimerRef.current !== null) window.clearTimeout(transitionTimerRef.current)
+    transitionTimerRef.current = null
+    crossfadeActiveRef.current = false
+    preloadedTrackIdRef.current = ''
     secondaryAudioRef.current?.pause()
     if (deckGainRef.current && audioContextRef.current) deckGainRef.current.gain.setValueAtTime(1, audioContextRef.current.currentTime)
     if (secondaryDeckGainRef.current && audioContextRef.current) secondaryDeckGainRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime)
