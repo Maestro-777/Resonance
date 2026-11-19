@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal
 title Resonance - доступ с телефона
 cd /d "%~dp0"
@@ -17,7 +18,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173 -TimeoutSec 3 ^| Out-Null; exit 0 } catch { exit 1 }"
+powershell -NoProfile -Command "$c=New-Object Net.Sockets.TcpClient; try { $c.Connect('127.0.0.1',5173); exit 0 } catch { exit 1 } finally { $c.Dispose() }"
 if errorlevel 1 (
   echo Сначала запустите 2-ЗАПУСТИТЬ.bat, затем повторите настройку.
   pause
@@ -34,7 +35,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo Откройте HTTPS-адрес Tailscale Serve на телефоне.
+echo Адрес для телефона показан ниже:
+echo.
+tailscale serve status
+echo.
+echo Скопируйте HTTPS-адрес вида https://имя-компьютера.имя-сети.ts.net и откройте его на телефоне.
 echo Tailscale должен быть включён на компьютере и телефоне.
 echo Компьютер должен оставаться включённым и не переходить в сон.
 echo Порт музыкального API 4317 наружу не публикуется.
