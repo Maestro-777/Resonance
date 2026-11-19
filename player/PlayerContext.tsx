@@ -430,6 +430,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: item.trackIds.filter(id => id !== trackId) } : item))
   }, [])
 
+  const movePlaylistTrack = useCallback((playlistId: string, fromIndex: number, toIndex: number) => {
+    setPlaylists(items => items.map(item => {
+      if (item.id !== playlistId || fromIndex < 0 || toIndex < 0 || fromIndex >= item.trackIds.length || toIndex >= item.trackIds.length || fromIndex === toIndex) return item
+      const trackIds = [...item.trackIds]
+      const [moved] = trackIds.splice(fromIndex, 1)
+      trackIds.splice(toIndex, 0, moved)
+      return { ...item, trackIds }
+    }))
+  }, [])
+
   const deletePlaylist = useCallback((playlistId: string) => {
     setPlaylists(items => items.filter(item => item.id !== playlistId))
   }, [])
