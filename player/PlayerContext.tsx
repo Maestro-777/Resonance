@@ -55,6 +55,7 @@ type PlayerContextValue = {
   connected: boolean
   accessKey: string
   setAccessKey: (key: string) => Promise<void>
+  disconnect: () => void
   refreshLibrary: () => Promise<void>
   scanLibrary: () => Promise<void>
   playTrack: (track: LibraryTrack) => Promise<void>
@@ -191,6 +192,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const result = await request<LibraryResponse>('/api/library', {}, clean)
     setTracks(result.tracks || [])
     setConnected(true)
+  }, [])
+
+  const disconnect = useCallback(() => {
+    audioRef.current?.pause()
+    secondaryAudioRef.current?.pause()
+    localStorage.removeItem(ACCESS_KEY)
+    setAccessKeyState('')
+    setConnected(false)
+    setTracks([])
+    setCurrentTrack(null)
+    setIsPlaying(false)
+    setError(null)
   }, [])
 
   const scanLibrary = useCallback(async () => {
@@ -768,11 +781,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
     tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist,
-    loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
+    loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, disconnect, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
 
   return (
     <PlayerContext.Provider value={value}>
