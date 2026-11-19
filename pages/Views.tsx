@@ -762,7 +762,7 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, playTrack, accessKey,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, playTrack, accessKey, sleepTimer, setSleepTimer,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
@@ -839,7 +839,19 @@ export function Player() {
       )}
       <footer className="relative flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:px-6 md:px-8 md:pb-8">
         <button type="button" onClick={() => setShowLyrics(value => !value)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/20"><AlignLeft size={15} />Текст песни</button>
-        <span className="text-xs text-white/50">В очереди: {queue.length} · {track?.format || '—'}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          {sleepTimer ? <span className="text-xs text-white/60">Таймер сна включён до {new Date(sleepTimer).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
+          <select value="" onChange={event => setSleepTimer(event.target.value ? Number(event.target.value) : null)} aria-label="Таймер сна" className="rounded-full border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/85 backdrop-blur">
+            <option value="">Таймер сна…</option>
+            <option value="15">Остановить через 15 минут</option>
+            <option value="30">Остановить через 30 минут</option>
+            <option value="45">Остановить через 45 минут</option>
+            <option value="60">Остановить через час</option>
+            <option value="90">Остановить через 90 минут</option>
+            <option value="0">Отключить таймер</option>
+          </select>
+          <span className="text-xs text-white/50">В очереди: {queue.length} · {track?.format || '—'}</span>
+        </div>
       </footer>
     </div>
   )
