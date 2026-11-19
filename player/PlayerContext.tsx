@@ -28,6 +28,8 @@ export type LibraryTrack = {
 
 type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
+export type UserPlaylist = { id: string; name: string; trackIds: string[] }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[] }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -41,6 +43,9 @@ type PlayerContextValue = {
   queue: LibraryTrack[]
   favorites: string[]
   history: string[]
+  playlists: UserPlaylist[]
+  createPlaylist: (name: string) => void
+  addTrackToPlaylist: (playlistId: string, trackId: string) => void
   loading: boolean
   error: string | null
   connected: boolean
@@ -66,7 +71,16 @@ const PlayerContext = createContext<PlayerContextValue | null>(null)
 const FAVORITES_KEY = 'resonance.favorites.v1'
 const QUEUE_KEY = 'resonance.queue.v1'
 const HISTORY_KEY = 'resonance.history.v1'
+const PLAYLISTS_KEY = 'resonance.playlists.v1'
 const ACCESS_KEY = 'resonance.accessKey'
+
+function readPlaylists(): UserPlaylist[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PLAYLISTS_KEY) || '[]')
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is UserPlaylist => Boolean(item && typeof item.id === 'string' && typeof item.name === 'string' && Array.isArray(item.trackIds)))
+  } catch { return [] }
+}
 
 function readIds(key: string): string[] {
   try {
@@ -101,6 +115,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
   const [queueIds, setQueueIds] = useState<string[]>(() => readIds(QUEUE_KEY))
   const [history, setHistory] = useState<string[]>(() => readIds(HISTORY_KEY))
+  const [playlists, setPlaylists] = useState<UserPlaylist[]>(() => readPlaylists())
+  const [syncLoaded, setSyncLoaded] = useState(false)
   const [accessKey, setAccessKeyState] = useState(() => localStorage.getItem(ACCESS_KEY) || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -174,6 +190,59 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
   }, [history])
+
+  useEffect(() => {
+    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists))
+  }, [playlists])
+
+  useEffect(() => {
+    if (!connected || !accessKey) {
+      setSyncLoaded(false)
+      return
+    }
+    let active = true
+    setSyncLoaded(false)
+    request<SyncState>('/api/sync', {}, accessKey).then(remote => {
+      if (!active) return
+      if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
+      if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
+      if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
+      if (remote.playlists) setPlaylists(current => {
+        const merged = new Map(current.map(item => [item.id, item]))
+        for (const item of remote.playlists || []) {
+          const previous = merged.get(item.id)
+          merged.set(item.id, previous ? { ...previous, ...item, trackIds: [...new Set([...previous.trackIds, ...item.trackIds])] } : item)
+        }
+        return [...merged.values()]
+      })
+    }).catch(() => {
+      if (active) setError('Не удалось загрузить синхронизацию. Локальные данные сохранены.')
+    }).finally(() => {
+      if (active) setSyncLoaded(true)
+    })
+    return () => { active = false }
+  }, [connected, accessKey])
+
+  useEffect(() => {
+    if (!connected || !accessKey || !syncLoaded) return
+    const timer = window.setTimeout(() => {
+      void request('/api/sync', {
+        method: 'PUT',
+        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists }),
+      }, accessKey).catch(() => setError('Синхронизация временно недоступна. Изменения сохранены на этом устройстве.'))
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists])
+
+  const createPlaylist = useCallback((name: string) => {
+    const clean = name.trim().slice(0, 120)
+    if (!clean) return
+    setPlaylists(items => [...items, { id: crypto.randomUUID(), name: clean, trackIds: [] }])
+  }, [])
+
+  const addTrackToPlaylist = useCallback((playlistId: string, trackId: string) => {
+    setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: [...new Set([...item.trackIds, trackId])] } : item))
+  }, [])
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume
@@ -360,12 +429,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
-    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history,
+    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, playlists, createPlaylist, addTrackToPlaylist,
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
 
   return (
     <PlayerContext.Provider value={value}>
