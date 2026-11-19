@@ -90,6 +90,8 @@ function MediaCard({
   )
 }
 
+type MetadataBackup = { id: string; filename: string; trackId: string; createdAt: string; size: number }
+
 function parseLrc(content: string) {
   return content.split(/\r?\n/).flatMap(line => {
     const stamps = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)]
@@ -897,11 +899,44 @@ export function Settings() {
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
+  const [metadataBackups, setMetadataBackups] = useState<MetadataBackup[]>([])
   const [editTrackId, setEditTrackId] = useState('')
   const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
   const [metadataMessage, setMetadataMessage] = useState('')
   const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
+
+  const loadMetadataBackups = async () => {
+    if (!connected || !accessKey) return
+    try {
+      const response = await fetch('/api/backups', { headers: { 'x-resonance-key': accessKey } })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось загрузить резервные копии')
+      setMetadataBackups(Array.isArray(result.backups) ? result.backups : [])
+    } catch (cause) {
+      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка загрузки резервных копий')
+    }
+  }
+
+  useEffect(() => {
+    void loadMetadataBackups()
+  }, [connected, accessKey])
+
+  const restoreBackupFile = async (backup: MetadataBackup) => {
+    setSavingMetadata(true)
+    try {
+      const response = await fetch(`/api/backups/${encodeURIComponent(backup.filename)}/restore`, { method: 'POST', headers: { 'x-resonance-key': accessKey } })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Не удалось восстановить копию')
+      await refreshLibrary()
+      await loadMetadataBackups()
+      setMetadataMessage('Резервная копия восстановлена. Перед восстановлением создана копия текущего файла.')
+    } catch (cause) {
+      setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка восстановления')
+    } finally {
+      setSavingMetadata(false)
+    }
+  }
 
   useEffect(() => {
     if (!editTrackId || !accessKey) return
@@ -930,6 +965,7 @@ export function Settings() {
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
       await refreshLibrary()
+      await loadMetadataBackups()
       setCoverData('')
       setMetadataMessage('Теги сохранены. Резервная копия исходного файла создана.')
     } catch (cause) {
@@ -1051,6 +1087,22 @@ export function Settings() {
             </div>
           ) : null}
           {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
+        </section>
+      ) : null}
+
+      {connected ? (
+        <section className="panel mb-5 p-4 md:p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div><h2 className="text-base font-semibold">Резервные копии тегов</h2><p className="t-dim mt-1 text-xs">{metadataBackups.length} копий сохранено на компьютере</p></div>
+            <button type="button" onClick={() => void loadMetadataBackups()} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs">Обновить</button>
+          </div>
+          {metadataBackups.length ? <div className="space-y-1">{metadataBackups.slice(0, 12).map(backup => {
+            const track = tracks.find(item => item.id === backup.trackId)
+            return <div key={backup.filename} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[var(--r-panel)]">
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{track?.title || backup.filename}</span><span className="t-mute block text-xs">{new Date(backup.createdAt).toLocaleString()} · {(backup.size / 1024 / 1024).toFixed(1)} МБ</span></span>
+              <button type="button" disabled={savingMetadata} onClick={() => void restoreBackupFile(backup)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs disabled:opacity-40">Восстановить</button>
+            </div>
+          })}</div> : <p className="t-dim text-sm">Резервные копии появятся после первого сохранения тегов.</p>}
         </section>
       ) : null}
 
