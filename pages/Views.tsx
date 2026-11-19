@@ -316,9 +316,18 @@ function Hero() {
 }
 
 export function Home() {
+  const { tracks, connected, history } = usePlayer()
+  const recentServerTracks = (history.length ? history : tracks.map(track => track.id)).map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track)).slice(0, 6)
   return (
     <div className="fade-up space-y-8">
       <Hero />
+
+      {connected ? (
+        <section>
+          <SectionHeader title="Ваша музыка" to="/library" actionLabel="Вся библиотека" />
+          <ServerTrackRows items={recentServerTracks} />
+        </section>
+      ) : null}
 
       <section>
         <SectionHeader title="Недавно прослушанные" to="/history" />
@@ -753,12 +762,13 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, accessKey,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, clearQueue, accessKey,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
   const [lyrics, setLyrics] = useState<string | null>(null)
   const [showLyrics, setShowLyrics] = useState(false)
+  const [showQueue, setShowQueue] = useState(false)
   useEffect(() => {
     let active = true
     setLyrics(null)
@@ -785,7 +795,7 @@ export function Player() {
       <header className="relative flex shrink-0 items-center justify-between px-4 py-4 md:px-8 md:py-6">
         <Link to="/" aria-label="Назад" className={`${glassBtn} h-10 w-10`}><ArrowLeft size={18} /></Link>
         <div className="flex items-center gap-2">
-          <button type="button" title={`Очередь: ${queue.length} треков`} className={`${glassBtn} h-10 w-10`}><ListMusic size={17} /></button>
+          <button type="button" title={`Очередь: ${queue.length} треков`} aria-pressed={showQueue} onClick={() => setShowQueue(value => !value)} className={`${glassBtn} h-10 w-10`}><ListMusic size={17} /></button>
           <button type="button" aria-label="Добавить текущий трек в очередь" onClick={() => track && addToQueue(track)} className={`${glassBtn} h-10 w-10`}><Plus size={17} /></button>
         </div>
       </header>
@@ -816,6 +826,12 @@ export function Player() {
         </div>
       </div>
 
+      {showQueue && (
+        <div className="relative mx-auto mb-3 max-h-44 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-3 text-left text-white/85 backdrop-blur">
+          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold">Очередь · {queue.length}</span><button type="button" onClick={clearQueue} className="text-xs text-white/60 hover:text-white">Очистить</button></div>
+          {queue.length ? queue.map((item, index) => <button key={item.id + index} type="button" onClick={() => void playTrack(item)} className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10">{index + 1}. {item.title} <span className="text-white/50">— {item.artist}</span></button>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
+        </div>
+      )}
       {showLyrics && (
         <div className="relative mx-auto mb-3 max-h-40 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 text-left text-sm leading-relaxed text-white/85 backdrop-blur">
           {lyrics ? <pre className="whitespace-pre-wrap font-sans">{lyrics}</pre> : <p className="text-white/60">Для этого трека текст песни не найден. Добавьте рядом с аудиофайлом файл .lrc или .txt.</p>}
