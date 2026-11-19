@@ -29,7 +29,7 @@ export type LibraryTrack = {
 type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
-type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[] }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; equalizer?: { eq?: Record<string, number>; eqPreset?: string } }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -43,6 +43,10 @@ type PlayerContextValue = {
   queue: LibraryTrack[]
   favorites: string[]
   history: string[]
+  equalizer: Record<string, number>
+  equalizerPreset: string
+  setEqBand: (frequency: string, gain: number) => void
+  setEqPreset: (preset: string) => void
   playlists: UserPlaylist[]
   createPlaylist: (name: string) => string | null
   addTrackToPlaylist: (playlistId: string, trackId: string) => void
@@ -72,7 +76,16 @@ const FAVORITES_KEY = 'resonance.favorites.v1'
 const QUEUE_KEY = 'resonance.queue.v1'
 const HISTORY_KEY = 'resonance.history.v1'
 const PLAYLISTS_KEY = 'resonance.playlists.v1'
+const EQ_KEY = 'resonance.equalizer.v1'
+const EQ_BANDS = ['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000']
 const ACCESS_KEY = 'resonance.accessKey'
+
+function readEqualizer(): Record<string, number> {
+  try {
+    const value = JSON.parse(localStorage.getItem(EQ_KEY) || '{}') as Record<string, unknown>
+    return Object.fromEntries(EQ_BANDS.map(key => [key, typeof value[key] === 'number' ? Math.max(-12, Math.min(12, value[key] as number)) : 0]))
+  } catch { return Object.fromEntries(EQ_BANDS.map(key => [key, 0])) }
+}
 
 function readPlaylists(): UserPlaylist[] {
   try {
@@ -103,6 +116,9 @@ async function request<T>(path: string, init: RequestInit = {}, key = ''): Promi
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const filterNodesRef = useRef<BiquadFilterNode[]>([])
   const objectUrlRef = useRef<string | null>(null)
   const [tracks, setTracks] = useState<LibraryTrack[]>([])
   const [currentTrack, setCurrentTrack] = useState<LibraryTrack | null>(null)
@@ -115,6 +131,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
   const [queueIds, setQueueIds] = useState<string[]>(() => readIds(QUEUE_KEY))
   const [history, setHistory] = useState<string[]>(() => readIds(HISTORY_KEY))
+  const [equalizer, setEqualizer] = useState<Record<string, number>>(() => readEqualizer())
+  const [equalizerPreset, setEqualizerPreset] = useState('Пользовательский')
   const [playlists, setPlaylists] = useState<UserPlaylist[]>(() => readPlaylists())
   const [syncLoaded, setSyncLoaded] = useState(false)
   const [accessKey, setAccessKeyState] = useState(() => localStorage.getItem(ACCESS_KEY) || '')
@@ -196,6 +214,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [playlists])
 
   useEffect(() => {
+    localStorage.setItem(EQ_KEY, JSON.stringify(equalizer))
+  }, [equalizer])
+
+  useEffect(() => {
     if (!connected || !accessKey) {
       setSyncLoaded(false)
       return
@@ -207,6 +229,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
       if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
       if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
+      if (remote.equalizer?.eq) setEqualizer(current => ({ ...current, ...remote.equalizer!.eq }))
+      if (remote.equalizer?.eqPreset) setEqualizerPreset(remote.equalizer.eqPreset)
       if (remote.playlists) setPlaylists(current => {
         const merged = new Map(current.map(item => [item.id, item]))
         for (const item of remote.playlists || []) {
@@ -228,11 +252,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => {
       void request('/api/sync', {
         method: 'PUT',
-        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists }),
+        body: JSON.stringify({ version: 1, favorites, history, queue: queueIds, playlists, equalizer: { eq: equalizer, eqPreset: equalizerPreset } }),
       }, accessKey).catch(() => setError('Синхронизация временно недоступна. Изменения сохранены на этом устройстве.'))
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists])
+  }, [connected, accessKey, syncLoaded, favorites, history, queueIds, playlists, equalizer, equalizerPreset])
 
   const createPlaylist = useCallback((name: string) => {
     const clean = name.trim().slice(0, 120)
@@ -246,15 +270,69 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: [...new Set([...item.trackIds, trackId])] } : item))
   }, [])
 
+  const activateAudioGraph = useCallback(async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext
+      const context = new AudioContextClass()
+      const source = context.createMediaElementSource(audio)
+      const filters = EQ_BANDS.map((frequency, index) => {
+        const filter = context.createBiquadFilter()
+        filter.type = index === 0 ? 'lowshelf' : index === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking'
+        filter.frequency.value = Number(frequency)
+        filter.Q.value = 1
+        filter.gain.value = equalizer[frequency] || 0
+        return filter
+      })
+      source.connect(filters[0])
+      filters.forEach((filter, index) => filter.connect(filters[index + 1] || context.destination))
+      audioContextRef.current = context
+      sourceNodeRef.current = source
+      filterNodesRef.current = filters
+    }
+    if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume()
+  }, [equalizer])
+
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume
-  }, [volume])
+    filterNodesRef.current.forEach((filter, index) => {
+      filter.gain.setTargetAtTime(equalizer[EQ_BANDS[index]] || 0, filter.context.currentTime, 0.015)
+    })
+  }, [equalizer])
+
+  const setEqBand = useCallback((frequency: string, gain: number) => {
+    setEqualizer(current => ({ ...current, [frequency]: Math.max(-12, Math.min(12, gain)) }))
+    setEqualizerPreset('Пользовательский')
+  }, [])
+
+  const setEqPreset = useCallback((preset: string) => {
+    const presets: Record<string, number[]> = {
+      'Плоский': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      'Басы': [6, 5, 4, 2, 0, -1, -1, 0, 1, 2],
+      'Рок': [4, 3, -1, -2, 1, 3, 4, 4, 3, 3],
+      'Классика': [3, 2, 1, 1, -1, -1, 0, 2, 3, 4],
+      'Джаз': [3, 2, 1, 2, -1, -1, 0, 1, 2, 3],
+      'Голос': [-3, -2, -1, 1, 3, 4, 3, 2, 0, -1],
+    }
+    const values = presets[preset]
+    if (!values) return
+    setEqualizer(Object.fromEntries(EQ_BANDS.map((key, index) => [key, values[index]])))
+    setEqualizerPreset(preset)
+  }, [])
+
+  useEffect(() => {
+    if (audioRef.current) {
+      const replayGain = currentTrack?.replayGainDb || 0
+      audioRef.current.volume = Math.min(1, volume * Math.pow(10, replayGain / 20))
+    }
+  }, [volume, currentTrack])
 
   const playTrack = useCallback(async (track: LibraryTrack) => {
     const audio = audioRef.current
     if (!audio) return
     setCurrentTrack(track)
     setHistory(items => [track.id, ...items.filter(id => id !== track.id)].slice(0, 500))
+    await activateAudioGraph()
     setCurrentTime(0)
     setDuration(track.duration || 0)
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
@@ -269,7 +347,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setError(cause instanceof Error ? cause.message : 'Браузер не смог начать воспроизведение')
     }
-  }, [])
+  }, [activateAudioGraph])
 
   const playOfflineTrack = useCallback(async (track: LibraryTrack, blob: Blob) => {
     const audio = audioRef.current
@@ -279,6 +357,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     objectUrlRef.current = url
     setCurrentTrack(track)
     setHistory(items => [track.id, ...items.filter(id => id !== track.id)].slice(0, 500))
+    await activateAudioGraph()
     setCurrentTime(0)
     setDuration(track.duration || 0)
     audio.src = url
@@ -291,7 +370,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setError(cause instanceof Error ? cause.message : 'Не удалось воспроизвести офлайн-файл')
     }
-  }, [])
+  }, [activateAudioGraph])
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current
@@ -431,12 +510,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const queue = useMemo(() => queueIds.map(id => tracks.find(track => track.id === id)).filter((item): item is LibraryTrack => Boolean(item)), [queueIds, tracks])
   const value = useMemo<PlayerContextValue>(() => ({
-    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, playlists, createPlaylist, addTrackToPlaylist,
+    tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist,
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
 
   return (
     <PlayerContext.Provider value={value}>
