@@ -69,6 +69,8 @@ type PlayerContextValue = {
   toggleFavorite: (id: string) => void
   addToQueue: (track: LibraryTrack) => void
   clearQueue: () => void
+  sleepTimer: number | null
+  setSleepTimer: (minutes: number | null) => void
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -77,6 +79,7 @@ const QUEUE_KEY = 'resonance.queue.v1'
 const HISTORY_KEY = 'resonance.history.v1'
 const PLAYLISTS_KEY = 'resonance.playlists.v1'
 const EQ_KEY = 'resonance.equalizer.v1'
+const PLAYBACK_KEY = 'resonance.playback.v1'
 const EQ_BANDS = ['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000']
 const ACCESS_KEY = 'resonance.accessKey'
 
@@ -120,6 +123,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
   const filterNodesRef = useRef<BiquadFilterNode[]>([])
   const objectUrlRef = useRef<string | null>(null)
+  const restoredPlaybackRef = useRef(false)
   const [tracks, setTracks] = useState<LibraryTrack[]>([])
   const [currentTrack, setCurrentTrack] = useState<LibraryTrack | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -128,6 +132,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [volume, setVolumeState] = useState(0.72)
   const [shuffle, setShuffle] = useState(false)
   const [repeat, setRepeat] = useState<RepeatMode>('off')
+  const [sleepTimer, setSleepTimerState] = useState<number | null>(null)
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY))
   const [queueIds, setQueueIds] = useState<string[]>(() => readIds(QUEUE_KEY))
   const [history, setHistory] = useState<string[]>(() => readIds(HISTORY_KEY))
@@ -216,6 +221,49 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(EQ_KEY, JSON.stringify(equalizer))
   }, [equalizer])
+
+  useEffect(() => {
+    if (currentTrack) localStorage.setItem(PLAYBACK_KEY, JSON.stringify({ trackId: currentTrack.id, position: currentTime }))
+  }, [currentTrack, currentTime])
+
+  useEffect(() => {
+    if (!tracks.length || restoredPlaybackRef.current) return
+    restoredPlaybackRef.current = true
+    try {
+      const saved = JSON.parse(localStorage.getItem(PLAYBACK_KEY) || 'null') as { trackId?: string; position?: number } | null
+      const track = saved?.trackId ? tracks.find(item => item.id === saved.trackId) : undefined
+      if (!track) return
+      const position = Number.isFinite(saved?.position) ? Math.max(0, saved!.position!) : 0
+      setCurrentTrack(track)
+      setCurrentTime(position)
+      setDuration(track.duration || 0)
+      const audio = audioRef.current
+      if (audio) {
+        audio.src = `/api/stream/${encodeURIComponent(track.id)}`
+        audio.addEventListener('loadedmetadata', () => {
+          audio.currentTime = Math.min(position, audio.duration || position)
+          setCurrentTime(audio.currentTime)
+        }, { once: true })
+        audio.load()
+      }
+    } catch { /* ignore a malformed local playback snapshot */ }
+  }, [tracks])
+
+  const setSleepTimer = useCallback((minutes: number | null) => {
+    setSleepTimerState(minutes && minutes > 0 ? Date.now() + minutes * 60_000 : null)
+  }, [])
+
+  useEffect(() => {
+    if (!sleepTimer) return
+    const timer = window.setTimeout(() => {
+      audioRef.current?.pause()
+      setIsPlaying(false)
+      setSleepTimerState(null)
+    }, Math.max(0, sleepTimer - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [sleepTimer])
+
+
 
   useEffect(() => {
     if (!connected || !accessKey) {
@@ -381,6 +429,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     if (audio.paused) {
       try {
+        await activateAudioGraph()
         await audio.play()
         setIsPlaying(true)
       } catch (cause) {
@@ -390,7 +439,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.pause()
       setIsPlaying(false)
     }
-  }, [currentTrack, playTrack, tracks])
+  }, [activateAudioGraph, currentTrack, playTrack, tracks])
 
   const next = useCallback(async () => {
     if (queueIds.length) {
@@ -514,8 +563,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
     next, previous, seek, setVolume, playOfflineTrack, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
-    toggleFavorite, addToQueue, clearQueue,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
+    toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer])
 
   return (
     <PlayerContext.Provider value={value}>
