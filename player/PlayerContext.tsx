@@ -357,10 +357,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: [...new Set([...item.trackIds, trackId])] } : item))
   }, [])
 
-  const exportData = useCallback(() => JSON.stringify({
-    app: 'resonance', version: 1, exportedAt: new Date().toISOString(),
-    favorites, history, queue: queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds,
-  }, null, 2), [favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
+  const exportData = useCallback(() => {
+    const snapshot = {
+      app: 'resonance',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      favorites,
+      history,
+      queue: queueIds,
+      playlists,
+      equalizer,
+      equalizerPreset,
+      crossfadeSeconds,
+    }
+    return JSON.stringify(snapshot, null, 2)
+  }, [favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
 
   const importData = useCallback((content: string) => {
     const data = JSON.parse(content) as Record<string, unknown>
