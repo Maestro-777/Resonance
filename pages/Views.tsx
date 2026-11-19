@@ -21,6 +21,7 @@ import {
   SkipForward,
   Sparkles,
   Star,
+  Volume2,
 } from 'lucide-react'
 import {
   albums,
