@@ -880,6 +880,7 @@ export function Settings() {
   const [editTrackId, setEditTrackId] = useState('')
   const [metadata, setMetadata] = useState({ title: '', artist: '', album: '', genre: '', year: '', trackNumber: '' })
   const [metadataMessage, setMetadataMessage] = useState('')
+  const [coverData, setCoverData] = useState('')
   const [savingMetadata, setSavingMetadata] = useState(false)
 
   useEffect(() => {
@@ -904,11 +905,12 @@ export function Settings() {
       const response = await fetch(`/api/metadata/${encodeURIComponent(editTrackId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'x-resonance-key': accessKey },
-        body: JSON.stringify(metadata),
+        body: JSON.stringify(coverData ? { ...metadata, coverData } : metadata),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Не удалось сохранить теги')
       await refreshLibrary()
+      setCoverData('')
       setMetadataMessage('Теги сохранены. Резервная копия исходного файла создана.')
     } catch (cause) {
       setMetadataMessage(cause instanceof Error ? cause.message : 'Ошибка записи тегов')
@@ -1007,6 +1009,20 @@ export function Settings() {
                   <input value={metadata[field]} onChange={event => setMetadata(value => ({ ...value, [field]: event.target.value }))} className="h-10 w-full rounded-xl border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm outline-none focus:border-[var(--r-accent)]" />
                 </label>
               ))}
+              <label className="block sm:col-span-2">
+                <span className="t-mute mb-1 block text-xs">Новая обложка (JPG или PNG, до 8 МБ)</span>
+                <input type="file" accept="image/jpeg,image/png" onChange={event => {
+                  const file = event.target.files?.[0]
+                  if (!file) return
+                  if (file.size > 8 * 1024 * 1024) { setMetadataMessage('Обложка должна быть не больше 8 МБ.'); event.target.value = ''; return }
+                  const reader = new FileReader()
+                  reader.onload = () => setCoverData(typeof reader.result === 'string' ? reader.result : '')
+                  reader.onerror = () => setMetadataMessage('Не удалось прочитать изображение.')
+                  reader.readAsDataURL(file)
+                  event.target.value = ''
+                }} className="block w-full text-sm t-dim file:mr-3 file:rounded-full file:border-0 file:bg-[var(--r-panel-2)] file:px-4 file:py-2 file:text-xs file:font-medium file:text-[var(--r-text)]" />
+                {coverData ? <span className="mt-1 block text-xs text-emerald-400">Обложка готова к сохранению</span> : null}
+              </label>
               <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
                 <button type="button" disabled={savingMetadata} onClick={() => void saveTags()} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{savingMetadata ? 'Сохранение…' : 'Сохранить теги'}</button>
                 <button type="button" disabled={savingMetadata} onClick={() => void restoreTags()} className="rounded-full border border-[var(--r-line)] px-4 py-2.5 text-sm disabled:opacity-50">Восстановить копию</button>
