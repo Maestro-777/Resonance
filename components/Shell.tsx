@@ -341,7 +341,7 @@ function PlayingBars({ active }: { active: boolean }) {
 function PlayerBar({ compact = false }: { compact?: boolean }) {
   const {
     currentTrack, isPlaying, togglePlay, next, previous, currentTime, duration,
-    volume, setVolume, shuffle, toggleShuffle, repeat, cycleRepeat,
+    volume, setVolume, shuffle, toggleShuffle, repeat, cycleRepeat, seek,
   } = usePlayer()
   const circleBtn =
     'grid place-items-center rounded-full text-[var(--r-text-dim)] transition-colors hover:bg-[var(--r-panel-2)] hover:text-[var(--r-text)]'
@@ -397,8 +397,7 @@ function PlayerBar({ compact = false }: { compact?: boolean }) {
           <div className="flex w-full max-w-[22rem] items-center gap-2">
             <span className="t-mute text-[0.64rem] tabular-nums">{formatTime(currentTime)}</span>
             <input type="range" min={0} max={Math.max(1, duration)} step={0.1} value={Math.min(currentTime, duration || 0)} aria-label="Позиция воспроизведения" disabled={!currentTrack} onChange={event => {
-              const audio = document.querySelector('audio')
-              if (audio) audio.currentTime = Number(event.target.value)
+              seek(Number(event.target.value))
             }} className="r-range min-w-0 flex-1" style={{ ['--_p' as string]: `${duration ? currentTime / duration * 100 : 0}%` } as CSSProperties} />
             <span className="t-mute text-[0.64rem] tabular-nums">{formatTime(duration)}</span>
           </div>
