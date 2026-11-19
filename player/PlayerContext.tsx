@@ -243,6 +243,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTrack, playTrack, tracks])
 
   const next = useCallback(async () => {
+    if (queueIds.length) {
+      const queuedId = queueIds[0]
+      const queuedTrack = tracks.find(track => track.id === queuedId)
+      setQueueIds(items => items.slice(1))
+      if (queuedTrack) {
+        await playTrack(queuedTrack)
+        return
+      }
+    }
     if (!tracks.length) return
     const currentIndex = currentTrack ? tracks.findIndex(track => track.id === currentTrack.id) : -1
     let nextTrack: LibraryTrack | undefined
@@ -259,7 +268,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setCurrentTime(0)
     }
-  }, [currentTrack, playTrack, repeat, shuffle, tracks])
+  }, [currentTrack, playTrack, queueIds, repeat, shuffle, tracks])
 
   const previous = useCallback(async () => {
     const audio = audioRef.current
