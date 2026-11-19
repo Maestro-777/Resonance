@@ -10,6 +10,7 @@ import {
   ListMusic,
   Maximize2,
   Music2,
+  MoreHorizontal,
   Pause,
   Play,
   Repeat,
@@ -196,6 +197,40 @@ function Sidebar() {
 
 const themeOrder: ThemeId[] = ['night', 'amethyst', 'graphite', 'oled']
 
+type PwaInstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
+
+function PWAInstallControl() {
+  const [installPrompt, setInstallPrompt] = useState<PwaInstallPrompt | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [installed, setInstalled] = useState(false)
+  useEffect(() => {
+    const onPrompt = (event: Event) => { event.preventDefault(); setInstallPrompt(event as PwaInstallPrompt) }
+    const onInstalled = () => { setInstalled(true); setInstallPrompt(null) }
+    window.addEventListener('beforeinstallprompt', onPrompt)
+    window.addEventListener('appinstalled', onInstalled)
+    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone) setInstalled(true)
+    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled) }
+  }, [])
+  const install = async () => {
+    if (!installPrompt) { setHelpOpen(value => !value); return }
+    await installPrompt.prompt()
+    const choice = await installPrompt.userChoice
+    if (choice.outcome === 'accepted') setInstalled(true)
+    setInstallPrompt(null)
+  }
+  return <div className="relative">
+    <button type="button" onClick={()=>void install()} title="Установить Resonance" className="accent-ring inline-flex h-9 items-center gap-2 rounded-full border border-[var(--r-line)] px-3 text-xs font-medium hover:bg-[var(--r-panel-2)]">
+      <Download size={15}/><span className="hidden sm:inline">{installed ? 'Приложение установлено' : 'Установить приложение'}</span><span className="sm:hidden">Установить</span>
+    </button>
+    {helpOpen && !installed ? <div className="absolute right-0 top-11 z-50 w-72 rounded-2xl border border-[var(--r-line)] bg-[var(--r-app)] p-4 text-xs shadow-2xl">
+      <p className="font-semibold">Установка Resonance</p>
+      <p className="t-dim mt-2">Android: открой меню браузера и выбери «Установить приложение» или «Добавить на главный экран».</p>
+      <p className="t-dim mt-2">iPhone: нажми «Поделиться» в Safari, затем «На экран Домой».</p>
+      <button type="button" onClick={()=>setHelpOpen(false)} className="accent-text mt-3">Понятно</button>
+    </div> : null}
+  </div>
+}
+
 function Topbar() {
   const { appearance, update, setPanelOpen } = useAppearance()
   const navigate = useNavigate()
@@ -238,7 +273,7 @@ function Topbar() {
         />
       </label>
 
-      <div className="ml-auto flex items-center gap-1.5 md:gap-2.5">
+      <div className="ml-auto flex items-center gap-1.5 md:gap-2.5">\n        <PWAInstallControl />
         <button
           type="button"
           onClick={cycleTheme}
@@ -380,33 +415,33 @@ function PlayerBar({ compact = false }: { compact?: boolean }) {
 const mobileNav = [
   { to: '/', label: 'Главная', icon: mainNav[0].icon },
   { to: '/library', label: 'Библиотека', icon: mainNav[1].icon },
-  { to: '/playlists', label: 'Плейлисты', icon: mainNav[6].icon },
-  { to: '/settings', label: 'Настройки', icon: secondaryNav[0].icon },
+  { to: '/albums', label: 'Альбомы', icon: mainNav[2].icon },
+  { to: '/playlists', label: 'Подборки', icon: mainNav[6].icon },
+]
+const mobileMore = [
+  { to: '/artists', label: 'Исполнители' },
+  { to: '/favorites', label: 'Избранное' },
+  { to: '/history', label: 'История' },
+  { to: '/offline', label: 'Офлайн-загрузки' },
+  { to: '/player', label: 'Полный плеер' },
+  { to: '/settings', label: 'Настройки' },
+  { to: '/about', label: 'О приложении' },
 ]
 
 function MobileDock() {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const { pathname } = useLocation()
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--r-line)] backdrop-blur-xl lg:hidden"
-      style={{ background: 'color-mix(in srgb, var(--r-app) 92%, transparent)' }}
-    >
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--r-line)] backdrop-blur-xl lg:hidden" style={{ background: 'color-mix(in srgb, var(--r-app) 94%, transparent)' }}>
+      {moreOpen ? <div className="absolute inset-x-3 bottom-[calc(100%+0.5rem)] grid grid-cols-2 gap-2 rounded-2xl border border-[var(--r-line)] bg-[var(--r-app)] p-3 shadow-2xl">
+        {mobileMore.map(item=><NavLink key={item.to} to={item.to} onClick={()=>setMoreOpen(false)} className={({isActive})=>`rounded-xl px-3 py-3 text-sm ${isActive?'nav-active':'bg-[var(--r-panel)] text-[var(--r-text-dim)]'}`}>{item.label}</NavLink>)}
+      </div> : null}
       <PlayerBar compact />
-      <nav className="flex items-center justify-around px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1">
-        {mobileNav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              `flex w-full flex-col items-center gap-1 rounded-lg py-1.5 text-[0.62rem] font-medium transition-colors ${
-                isActive ? 'text-[var(--r-accent)]' : 'text-[var(--r-text-mute)]'
-              }`
-            }
-          >
-            <item.icon size={19} />
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
+      <nav className="flex items-center justify-around px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1" aria-label="Мобильная навигация">
+        {mobileNav.map(item => <NavLink key={item.to} to={item.to} end={item.to==='/'} className={({isActive})=>`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[0.62rem] font-medium transition-colors ${isActive?'text-[var(--r-accent)]':'text-[var(--r-text-mute)]'}`}>
+          <item.icon size={19}/><span className="truncate">{item.label}</span>
+        </NavLink>)}
+        <button type="button" onClick={()=>setMoreOpen(value=>!value)} aria-expanded={moreOpen} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[0.62rem] font-medium ${moreOpen||mobileMore.some(item=>pathname===item.to)?'text-[var(--r-accent)]':'text-[var(--r-text-mute)]'}`}><MoreHorizontal size={19}/><span>Ещё</span></button>
       </nav>
     </div>
   )
