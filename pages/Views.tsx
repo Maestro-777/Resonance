@@ -874,7 +874,7 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -1017,6 +1017,27 @@ export function Settings() {
           {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
         </section>
       ) : null}
+
+      <section className="panel mb-5 p-4 md:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Эквалайзер</h2>
+            <p className="t-dim mt-1 text-sm">10 полос Web Audio · ReplayGain применяется автоматически, если теги есть в файле</p>
+          </div>
+          <select value={equalizerPreset} onChange={event => setEqPreset(event.target.value)} aria-label="Пресет эквалайзера" className="h-9 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-3 text-sm">
+            {['Пользовательский', 'Плоский', 'Басы', 'Рок', 'Классика', 'Джаз', 'Голос'].map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+        <div className="mt-5 grid grid-cols-5 gap-3 sm:grid-cols-10">
+          {['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000'].map(frequency => (
+            <label key={frequency} className="flex flex-col items-center gap-2">
+              <span className="t-mute text-[0.66rem] tabular-nums">{equalizer[frequency] > 0 ? '+' : ''}{equalizer[frequency] || 0} dB</span>
+              <input type="range" min={-12} max={12} step={1} value={equalizer[frequency] || 0} onChange={event => setEqBand(frequency, Number(event.target.value))} aria-label={`Эквалайзер ${frequency} Гц`} className="h-24 w-5 accent-[var(--r-accent)] [writing-mode:vertical-lr] [direction:rtl]" />
+              <span className="t-mute text-[0.65rem]">{Number(frequency) >= 1000 ? `${Number(frequency) / 1000}k` : frequency}</span>
+            </label>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="panel p-5 md:p-6">
