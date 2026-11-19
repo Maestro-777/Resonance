@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   AlignLeft,
+  AudioLines,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
@@ -373,7 +374,7 @@ export function Library() {
   const [sort, setSort] = useState('default')
   const { tracks, connected } = usePlayer()
   const [query, setQuery] = useState('')
-  const serverTracks = tracks.filter(track => [track.title, track.artist, track.album].some(value => value.toLowerCase().includes(query.toLowerCase()))).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'new' ? b.year - a.year : a.artist.localeCompare(b.artist))
+  const serverTracks = tracks.filter(track => [track.title, track.artist, track.album].some(value => value.toLowerCase().includes(query.toLowerCase()))).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'new' ? (b.year ?? 0) - (a.year ?? 0) : a.artist.localeCompare(b.artist))
 
   return (
     <div className="fade-up">
@@ -774,6 +775,9 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
+  const { connected, accessKey, setAccessKey, scanLibrary, loading, tracks, error } = usePlayer()
+  const [serverKey, setServerKey] = useState('')
+  const [serverMessage, setServerMessage] = useState('')
 
   return (
     <div className="fade-up">
@@ -789,6 +793,30 @@ export function Settings() {
           Открыть панель
         </button>
       </PageHead>
+
+      <section className="panel mb-5 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold">Музыкальный сервер</h2>
+              <span className={`rounded-full px-2.5 py-1 text-[0.68rem] ${connected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--r-panel-2)] t-dim'}`}>{connected ? 'Подключён' : 'Не подключён'}</span>
+            </div>
+            <p className="t-dim mt-1 text-sm">Сервер читает вашу папку с музыкой на компьютере. Введите ключ из server/.env, чтобы загрузить библиотеку.</p>
+            {connected ? <p className="t-mute mt-2 text-xs">{tracks.length} треков доступны для воспроизведения</p> : null}
+          </div>
+          {connected ? (
+            <button type="button" disabled={loading} onClick={() => { setServerMessage(''); void scanLibrary().then(() => setServerMessage('Сканирование завершено.')).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Ошибка сканирования.')) }} className="accent-btn rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50">{loading ? 'Сканирование…' : 'Сканировать папку'}</button>
+          ) : null}
+        </div>
+        {!connected ? (
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <input type="password" autoComplete="current-password" value={serverKey} onChange={event => setServerKey(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) } }} placeholder="Ключ доступа Resonance" aria-label="Ключ доступа сервера" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+            <button type="button" disabled={!serverKey.trim() || loading} onClick={() => { void setAccessKey(serverKey).then(() => { setServerKey(''); setServerMessage('Сервер подключён.') }).catch(cause => setServerMessage(cause instanceof Error ? cause.message : 'Не удалось подключиться.')) }} className="accent-btn rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-50">Подключить</button>
+          </div>
+        ) : null}
+        {serverMessage || error ? <p role="status" className="mt-3 text-sm text-[var(--r-text-dim)]">{serverMessage || error}</p> : null}
+        {accessKey && !connected ? <p className="t-mute mt-2 text-xs">Ключ сохранён в этом браузере. Проверьте, что сервер запущен на этом компьютере.</p> : null}
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="panel p-5 md:p-6">
@@ -838,10 +866,9 @@ export function Settings() {
           </div>
 
           <div className="panel p-5">
-            <h3 className="text-[0.92rem] font-semibold">Статус прототипа</h3>
+            <h3 className="text-[0.92rem] font-semibold">Локальная библиотека</h3>
             <p className="t-dim mt-2 text-[0.78rem] leading-relaxed">
-              Это фронтенд-макет: свёрстаны экраны, состояния и адаптив. Воспроизведение,
-              авторизация и загрузки появятся на следующем этапе.
+              Музыкальные файлы остаются на вашем компьютере. Веб-интерфейс получает метаданные и аудиопоток от локального сервера; ключ доступа хранится только в этом браузере.
             </p>
           </div>
         </div>
