@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import os from 'node:os'
 import path from 'node:path'
-import { parseByteRange, resolveSafePath, sanitizeSyncState } from '../lib/utils.js'
+import { parseByteRange, resolveSafePath, sanitizeSyncState, isPublicIpAddress } from '../lib/utils.js'
 
 test('parseByteRange supports normal, open-ended and suffix ranges', () => {
   assert.deepEqual(parseByteRange('bytes=0-9', 100), { start: 0, end: 9 })
@@ -129,4 +129,16 @@ test('sanitizeSyncState validates Resonance appearance preferences', async () =>
     density: 'compact', glow: false, animations: true, labels: false,
   })
   assert.equal(sanitizeSyncState({ appearance: { theme: 'invalid', accent: 'red', density: 'huge' } }).appearance, null)
+})
+
+test('isPublicIpAddress rejects private, loopback, link-local and reserved IP ranges', () => {
+  for (const address of ['127.0.0.1', '10.0.0.1', '192.168.1.2', '172.16.0.1', '169.254.1.1', '100.64.0.1', '0.0.0.0', '224.0.0.1', '::1', '::', 'fc00::1', 'fd12::1', 'fe80::1', 'ff02::1', '::ffff:127.0.0.1']) {
+    assert.equal(isPublicIpAddress(address), false, address)
+  }
+})
+
+test('isPublicIpAddress accepts public IPv4 and global IPv6 addresses', () => {
+  for (const address of ['1.1.1.1', '8.8.8.8', '93.184.216.34', '2606:4700:4700::1111', '2001:4860:4860::8888']) {
+    assert.equal(isPublicIpAddress(address), true, address)
+  }
 })
