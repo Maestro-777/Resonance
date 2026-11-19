@@ -74,16 +74,32 @@ test('sanitizeUploadFilename strips paths and unsafe characters while preserving
   assert.throws(() => sanitizeUploadFilename(''), /Empty upload/)
 })
 
-test('mergeSyncStates keeps concurrent additions instead of replacing the previous device state', async () => {
+test('mergeSyncStates treats editable collections as snapshots and preserves history additions', async () => {
   const { mergeSyncStates } = await import('../lib/utils.js')
   const merged = mergeSyncStates(
     { favorites: ['a'], playlists: [{ id: 'mix', name: 'Mix', trackIds: ['one'] }], history: ['old'], queue: ['one'] },
     { favorites: ['b'], playlists: [{ id: 'mix', name: 'Mix', trackIds: ['two'] }], history: ['new'], queue: ['two'] },
   )
-  assert.deepEqual(new Set(merged.favorites), new Set(['a', 'b']))
-  assert.deepEqual(merged.playlists, [{ id: 'mix', name: 'Mix', trackIds: ['one', 'two'] }])
+  assert.deepEqual(merged.favorites, ['b'])
+  assert.deepEqual(merged.playlists, [{ id: 'mix', name: 'Mix', trackIds: ['two'] }])
   assert.deepEqual(new Set(merged.history), new Set(['old', 'new']))
-  assert.deepEqual(new Set(merged.queue), new Set(['one', 'two']))
+  assert.deepEqual(merged.queue, ['two'])
+})
+
+test('mergeSyncStates preserves an explicit empty snapshot so deletions sync', async () => {
+  const { mergeSyncStates } = await import('../lib/utils.js')
+  const merged = mergeSyncStates(
+    { favorites: ['a'], playlists: [{ id: 'mix', name: 'Mix', trackIds: ['one'] }], queue: ['one'] },
+    { favorites: [], playlists: [], queue: [] },
+  )
+  assert.deepEqual(merged.favorites, [])
+  assert.deepEqual(merged.playlists, [])
+  assert.deepEqual(merged.queue, [])
+})
+
+test('sanitizeSyncState preserves bounded playlist cover and description', () => {
+  const result = sanitizeSyncState({ playlists: [{ id: 'p', name: 'Mix', trackIds: [], description: 'Evening', cover: 'data:image/png;base64,AAAA' }] })
+  assert.deepEqual(result.playlists, [{ id: 'p', name: 'Mix', trackIds: [], description: 'Evening', cover: 'data:image/png;base64,AAAA' }])
 })
 
 test('parseReplayGainDb reads gain tags and clamps unsafe extremes', async () => {

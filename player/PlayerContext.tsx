@@ -31,7 +31,7 @@ type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null; root?:
 type RepeatMode = 'off' | 'all' | 'one'
 type PlaybackSnapshot = { trackId: string; position: number; updatedAt?: string | null }
 export type UserPlaylist = { id: string; name: string; trackIds: string[]; cover?: string; description?: string }
-type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number }; appearance?: Partial<Appearance> }
+type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number }; appearance?: Partial<Appearance>; updatedAt?: string | null }
 
 type PlayerContextValue = {
   tracks: LibraryTrack[]
@@ -361,20 +361,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (remote.appearance) {
         for (const [key, value] of Object.entries(remote.appearance)) updateAppearance(key as keyof Appearance, value as never)
       }
-      if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
-      if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
-      if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
+      if (remote.updatedAt) {
+        // The server snapshot is authoritative for editable collections: this preserves
+        // deliberate removals and the user's queue / playlist ordering across devices.
+        setFavorites(remote.favorites || [])
+        setHistory(remote.history || [])
+        setQueueIds(remote.queue || [])
+        setPlaylists(remote.playlists || [])
+      } else {
+        // First connection to an empty server: keep local browser data and seed the server.
+        if (remote.favorites) setFavorites(current => [...new Set([...current, ...remote.favorites!])])
+        if (remote.history) setHistory(current => [...new Set([...current, ...remote.history!])].slice(0, 500))
+        if (remote.queue) setQueueIds(current => [...new Set([...current, ...remote.queue!])].slice(0, 5000))
+        if (remote.playlists) setPlaylists(current => {
+          const merged = new Map(current.map(item => [item.id, item]))
+          for (const item of remote.playlists || []) {
+            const previous = merged.get(item.id)
+            merged.set(item.id, previous ? { ...previous, ...item, trackIds: [...new Set([...previous.trackIds, ...item.trackIds])] } : item)
+          }
+          return [...merged.values()]
+        })
+      }
       if (remote.equalizer?.eq) setEqualizer(current => ({ ...current, ...remote.equalizer!.eq }))
       if (remote.equalizer?.eqPreset) setEqualizerPreset(remote.equalizer.eqPreset)
       if (typeof remote.preferences?.crossfadeSeconds === 'number') setCrossfadeSecondsState(Math.max(0, Math.min(8, remote.preferences.crossfadeSeconds)))
-      if (remote.playlists) setPlaylists(current => {
-        const merged = new Map(current.map(item => [item.id, item]))
-        for (const item of remote.playlists || []) {
-          const previous = merged.get(item.id)
-          merged.set(item.id, previous ? { ...previous, ...item, trackIds: [...new Set([...previous.trackIds, ...item.trackIds])] } : item)
-        }
-        return [...merged.values()]
-      })
     }).catch(() => {
       if (active) setError('Не удалось загрузить синхронизацию. Локальные данные сохранены.')
     }).finally(() => {

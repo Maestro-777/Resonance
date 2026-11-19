@@ -38,20 +38,16 @@ export function parseByteRange(header, size) {
 export function mergeSyncStates(previous = {}, incoming = {}) {
   const left = sanitizeSyncState(previous)
   const right = sanitizeSyncState(incoming)
+  const has = key => Object.prototype.hasOwnProperty.call(incoming || {}, key)
   const mergeStrings = (a, b, limit) => [...new Set([...a, ...b])].slice(-limit)
-  const playlistMap = new Map(left.playlists.map(item => [item.id, item]))
-  for (const item of right.playlists) {
-    const old = playlistMap.get(item.id)
-    playlistMap.set(item.id, old
-      ? { ...old, ...item, trackIds: mergeStrings(old.trackIds, item.trackIds, 5000) }
-      : item)
-  }
   return {
     version: 1,
-    favorites: mergeStrings(left.favorites, right.favorites, 10000),
-    playlists: [...playlistMap.values()].slice(-500),
-    history: mergeStrings(right.history, left.history, 500),
-    queue: mergeStrings(left.queue, right.queue, 5000),
+    // Collection arrays are snapshots: replacements, deletions and user-defined ordering
+    // must survive sync. History remains append/merge oriented across devices.
+    favorites: has('favorites') ? right.favorites : left.favorites,
+    playlists: has('playlists') ? right.playlists : left.playlists,
+    history: has('history') ? mergeStrings(right.history, left.history, 500) : left.history,
+    queue: has('queue') ? right.queue : left.queue,
     playback: (() => { const a = left.playback, b = right.playback; if (!a) return b; if (!b) return a; return Date.parse(b.updatedAt || '') >= Date.parse(a.updatedAt || '') ? b : a })(),
     preferences: right.preferences || left.preferences,
     appearance: right.appearance || left.appearance,
@@ -68,7 +64,13 @@ export function sanitizeSyncState(value = {}) {
   const playlists = Array.isArray(input.playlists)
     ? input.playlists.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string' && Array.isArray(item.trackIds))
       .slice(0, 500)
-      .map(item => ({ id: item.id.slice(0, 128), name: item.name.trim().slice(0, 120), trackIds: strings(item.trackIds, 5000) }))
+      .map(item => ({
+        id: item.id.slice(0, 128),
+        name: item.name.trim().slice(0, 120),
+        trackIds: strings(item.trackIds, 5000),
+        ...(typeof item.description === 'string' ? { description: item.description.slice(0, 500) } : {}),
+        ...(typeof item.cover === 'string' && item.cover.length <= 8 * 1024 * 1024 && (new RegExp('^data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$', 'i').test(item.cover) || new RegExp('^/api/artwork/[A-Za-z0-9_-]{1,128}$').test(item.cover)) ? { cover: item.cover } : {}),
+      }))
       .filter(item => item.name.length > 0)
     : []
   const sourcePlayback = input.playback && typeof input.playback === 'object' && !Array.isArray(input.playback) ? input.playback : null
