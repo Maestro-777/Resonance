@@ -115,6 +115,7 @@ export function sanitizeSyncState(value = {}) {
     queue: strings(input.queue, 5000),
     playback,
     preferences: Object.keys(preferences).length ? preferences : null,
+    appearance: Object.keys(appearance).length ? appearance : null,
     equalizer,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
   }
