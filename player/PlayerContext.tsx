@@ -28,7 +28,7 @@ export type LibraryTrack = {
 
 type LibraryResponse = { tracks: LibraryTrack[]; lastScan: string | null }
 type RepeatMode = 'off' | 'all' | 'one'
-type PlaybackSnapshot = { trackId: string; position: number; updatedAt: string }
+type PlaybackSnapshot = { trackId: string; position: number; updatedAt?: string | null }
 export type UserPlaylist = { id: string; name: string; trackIds: string[] }
 type SyncState = { favorites?: string[]; history?: string[]; queue?: string[]; playlists?: UserPlaylist[]; playback?: PlaybackSnapshot; equalizer?: { eq?: Record<string, number>; eqPreset?: string }; preferences?: { crossfadeSeconds?: number } }
 
