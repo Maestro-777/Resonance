@@ -863,7 +863,7 @@ export function Player() {
 
 export function Settings() {
   const { setPanelOpen } = useAppearance()
-  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset } = usePlayer()
+  const { connected, accessKey, setAccessKey, scanLibrary, refreshLibrary, loading, tracks, error, equalizer, equalizerPreset, setEqBand, setEqPreset, crossfadeSeconds, setCrossfadeSeconds } = usePlayer()
   const [serverKey, setServerKey] = useState('')
   const [serverMessage, setServerMessage] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -1006,6 +1006,17 @@ export function Settings() {
           {metadataMessage ? <p role="status" className="mt-3 text-sm t-dim">{metadataMessage}</p> : null}
         </section>
       ) : null}
+
+      <section className="panel mb-5 p-4 md:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Переход между треками</h2>
+            <p className="t-dim mt-1 text-sm">Плавное перекрытие двух аудиодеков или gapless-переход при нулевом значении</p>
+          </div>
+          <span className="text-sm font-semibold tabular-nums">{crossfadeSeconds} сек.</span>
+        </div>
+        <input type="range" min={0} max={8} step={1} value={crossfadeSeconds} onChange={event => setCrossfadeSeconds(Number(event.target.value))} aria-label="Длительность crossfade" className="r-range mt-4 w-full" style={{ ['--_p' as string]: `${crossfadeSeconds / 8 * 100}%` } as CSSProperties} />
+      </section>
 
       <section className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
