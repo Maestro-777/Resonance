@@ -112,5 +112,5 @@ test('sanitizeSyncState validates Resonance appearance preferences', async () =>
     theme: 'oled', accent: '#8b5cf6', radius: 28, blur: 0, scale: 1.1, cols: 8,
     density: 'compact', glow: false, animations: true, labels: false,
   })
-  assert.deepEqual(sanitizeSyncState({ appearance: { theme: 'invalid', accent: 'red', density: 'huge' } }).appearance, {})
+  assert.equal(sanitizeSyncState({ appearance: { theme: 'invalid', accent: 'red', density: 'huge' } }).appearance, null)
 })
