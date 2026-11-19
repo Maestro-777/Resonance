@@ -197,12 +197,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'x-resonance-key': clean },
     })
+    const result = await request<LibraryResponse>('/api/library', {}, clean)
     localStorage.setItem(ACCESS_KEY, clean)
     setAccessKeyState(clean)
-    setError(null)
-    const result = await request<LibraryResponse>('/api/library', {}, clean)
     setTracks(result.tracks || [])
     setConnected(true)
+    setError(null)
   }, [])
 
   const disconnect = useCallback(() => {
