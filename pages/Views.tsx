@@ -792,10 +792,24 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, accessKey,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
+  const [lyrics, setLyrics] = useState<string | null>(null)
+  const [showLyrics, setShowLyrics] = useState(false)
+  useEffect(() => {
+    let active = true
+    setLyrics(null)
+    setShowLyrics(false)
+    if (track && accessKey) {
+      void fetch(`/api/lyrics/${encodeURIComponent(track.id)}`, { headers: { 'x-resonance-key': accessKey } })
+        .then(response => response.ok ? response.text() : null)
+        .then(value => { if (active) setLyrics(value) })
+        .catch(() => { if (active) setLyrics(null) })
+    }
+    return () => { active = false }
+  }, [track?.id, accessKey])
   const progress = duration > 0 ? currentTime / duration : 0
   const bars = Math.round(waveHeights.length * progress)
   const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
@@ -841,9 +855,14 @@ export function Player() {
         </div>
       </div>
 
-      <footer className="relative hidden shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:flex md:px-8 md:pb-8">
-        <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] text-white/75 backdrop-blur">В очереди: {queue.length}</span>
-        <span className="text-xs text-white/50">Формат: {track?.format || '—'}</span>
+      {showLyrics && (
+        <div className="relative mx-auto mb-3 max-h-40 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 text-left text-sm leading-relaxed text-white/85 backdrop-blur">
+          {lyrics ? <pre className="whitespace-pre-wrap font-sans">{lyrics}</pre> : <p className="text-white/60">Для этого трека текст песни не найден. Добавьте рядом с аудиофайлом файл .lrc или .txt.</p>}
+        </div>
+      )}
+      <footer className="relative flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:px-6 md:px-8 md:pb-8">
+        <button type="button" onClick={() => setShowLyrics(value => !value)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/20"><AlignLeft size={15} />Текст песни</button>
+        <span className="text-xs text-white/50">В очереди: {queue.length} · {track?.format || '—'}</span>
       </footer>
     </div>
   )
