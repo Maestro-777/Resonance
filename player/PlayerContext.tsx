@@ -49,6 +49,7 @@ type PlayerContextValue = {
   refreshLibrary: () => Promise<void>
   scanLibrary: () => Promise<void>
   playTrack: (track: LibraryTrack) => Promise<void>
+  playOfflineTrack: (track: LibraryTrack, blob: Blob) => Promise<void>
   togglePlay: () => Promise<void>
   next: () => Promise<void>
   previous: () => Promise<void>
@@ -88,6 +89,7 @@ async function request<T>(path: string, init: RequestInit = {}, key = ''): Promi
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const objectUrlRef = useRef<string | null>(null)
   const [tracks, setTracks] = useState<LibraryTrack[]>([])
   const [currentTrack, setCurrentTrack] = useState<LibraryTrack | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -184,6 +186,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setHistory(items => [track.id, ...items.filter(id => id !== track.id)].slice(0, 500))
     setCurrentTime(0)
     setDuration(track.duration || 0)
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+    objectUrlRef.current = null
     audio.src = `/api/stream/${encodeURIComponent(track.id)}`
     audio.load()
     try {
@@ -193,6 +197,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch (cause) {
       setIsPlaying(false)
       setError(cause instanceof Error ? cause.message : 'Браузер не смог начать воспроизведение')
+    }
+  }, [])
+
+  const playOfflineTrack = useCallback(async (track: LibraryTrack, blob: Blob) => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+    const url = URL.createObjectURL(blob)
+    objectUrlRef.current = url
+    setCurrentTrack(track)
+    setHistory(items => [track.id, ...items.filter(id => id !== track.id)].slice(0, 500))
+    setCurrentTime(0)
+    setDuration(track.duration || 0)
+    audio.src = url
+    audio.load()
+    try {
+      await audio.play()
+      setIsPlaying(true)
+      setError(null)
+    } catch (cause) {
+      setIsPlaying(false)
+      setError(cause instanceof Error ? cause.message : 'Не удалось воспроизвести офлайн-файл')
     }
   }, [])
 
@@ -327,10 +353,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerContextValue>(() => ({
     tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history,
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
-    next, previous, seek, setVolume, toggleShuffle: () => setShuffle(value => !value),
+    next, previous, seek, setVolume, playOfflineTrack, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue])
 
   return (
     <PlayerContext.Provider value={value}>
