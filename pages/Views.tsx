@@ -610,35 +610,60 @@ export function Artists() {
 /* ================================================================== */
 
 export function Playlists() {
+  const { tracks, playlists: userPlaylists, createPlaylist, addTrackToPlaylist, playTrack } = usePlayer()
+  const [name, setName] = useState('')
+  const [targetId, setTargetId] = useState('')
+  const create = () => {
+    const id = createPlaylist(name)
+    if (id) { setTargetId(id); setName('') }
+  }
   return (
     <div className="fade-up">
-      <PageHead title="Плейлисты" subtitle="Ваши музыкальные подборки">
-        <button
-          type="button"
-          className="accent-ring inline-flex h-10 items-center gap-2 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-[0.82rem] font-medium transition-colors hover:bg-[var(--r-panel-2)]"
-        >
-          <Plus size={15} />
-          Создать плейлист
-        </button>
-      </PageHead>
-
+      <PageHead title="Плейлисты" subtitle="Ваши музыкальные подборки" />
+      <section className="panel mb-6 p-4 md:p-5">
+        <h2 className="mb-3 text-sm font-semibold">Новая подборка</h2>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') create() }} placeholder="Название плейлиста" aria-label="Название плейлиста" className="h-10 min-w-0 flex-1 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm outline-none focus:border-[var(--r-accent)]" />
+          <button type="button" disabled={!name.trim()} onClick={create} className="accent-btn inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40"><Plus size={15} />Создать</button>
+        </div>
+      </section>
+      {userPlaylists.length ? (
+        <section className="panel mb-6 p-4 md:p-5">
+          <h2 className="mb-3 text-sm font-semibold">Мои плейлисты</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {userPlaylists.map(playlist => {
+              const items = playlist.trackIds.map(id => tracks.find(track => track.id === id)).filter((track): track is LibraryTrack => Boolean(track))
+              return <div key={playlist.id} className="rounded-xl border border-[var(--r-line)] p-3">
+                <p className="font-medium">{playlist.name}</p>
+                <p className="t-mute mt-1 text-xs">{items.length} треков</p>
+                {items.length ? <div className="mt-2 space-y-1">{items.slice(0, 5).map(track => <button key={track.id} type="button" onClick={() => void playTrack(track)} className="block w-full truncate text-left text-xs t-dim hover:accent-text">{track.title} — {track.artist}</button>)}</div> : <p className="t-mute mt-2 text-xs">Пока нет треков</p>}
+              </div>
+            })}
+          </div>
+        </section>
+      ) : null}
+      {userPlaylists.length && tracks.length ? (
+        <section className="panel mb-6 p-4 md:p-5">
+          <h2 className="mb-3 text-sm font-semibold">Добавить музыку в плейлист</h2>
+          <select value={targetId} onChange={event => setTargetId(event.target.value)} aria-label="Выберите плейлист" className="mb-3 h-10 w-full rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 text-sm">
+            <option value="">Выберите плейлист</option>
+            {userPlaylists.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <div className="space-y-1">
+            {tracks.slice(0, 30).map(track => <div key={track.id} className="flex items-center gap-3 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-sm">{track.title} <span className="t-mute">· {track.artist}</span></span>
+              <button type="button" disabled={!targetId || userPlaylists.find(item => item.id === targetId)?.trackIds.includes(track.id)} onClick={() => addTrackToPlaylist(targetId, track.id)} className="rounded-full border border-[var(--r-line)] px-3 py-1.5 text-xs disabled:opacity-40">Добавить</button>
+            </div>)}
+          </div>
+        </section>
+      ) : null}
+      <h2 className="mb-4 text-base font-semibold">Подборки Resonance</h2>
       <div className="media-grid">
-        {playlists.map((playlist) => (
+        {playlists.map(playlist => (
           <Link key={playlist.id} to="/player" className="cover-wrap group block">
             <div className="cover-art aspect-square">
-              {playlist.cover ? (
-                <img src={playlist.cover} alt={playlist.title} loading="lazy" />
-              ) : (
-                <div
-                  className="flex h-full w-full items-center justify-center"
-                  style={{ background: playlist.gradient }}
-                >
-                  <Star size={40} className="text-white/90" fill="currentColor" />
-                </div>
-              )}
-              <span className="cover-play" aria-hidden="true">
-                <Play size={13} fill="currentColor" />
-              </span>
+              {playlist.cover ? <img src={playlist.cover} alt={playlist.title} loading="lazy" /> : <div className="flex h-full w-full items-center justify-center" style={{ background: playlist.gradient }}><Star size={40} className="text-white/90" fill="currentColor" /></div>}
+              <span className="cover-play" aria-hidden="true"><Play size={13} fill="currentColor" /></span>
             </div>
             <p className="mt-2.5 truncate text-[0.86rem] font-medium">{playlist.title}</p>
             <p className="t-mute truncate text-[0.74rem]">{playlist.count}</p>
