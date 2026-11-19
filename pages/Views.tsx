@@ -536,124 +536,115 @@ const waveHeights = Array.from({ length: 72 }).map(
 export function Player() {
   const {
     currentTrack, tracks, isPlaying, currentTime, duration, togglePlay, next, previous, seek,
-    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue, moveQueueItem, clearQueue, removeFromQueue, playTrack, accessKey, sleepTimer, setSleepTimer, volume, setVolume, error, getSpectrum,
+    shuffle, toggleShuffle, repeat, cycleRepeat, favorites, toggleFavorite, queue, addToQueue,
+    moveQueueItem, clearQueue, removeFromQueue, playTrack, volume, setVolume, error,
   } = usePlayer()
   const track = currentTrack || tracks[0] || null
   const liked = track ? favorites.includes(track.id) : false
-  const [lyrics, setLyrics] = useState<string | null>(null)
-  const [showLyrics, setShowLyrics] = useState(false)
-  const [showQueue, setShowQueue] = useState(false)
-  const [liveBars, setLiveBars] = useState<number[]>(waveHeights)
-  useEffect(() => {
-    if (!isPlaying) { setLiveBars(waveHeights); return }
-    let frame = 0
-    let lastUpdate = 0
-    const draw = (now: number) => {
-      if (now - lastUpdate >= 90) {
-        const values = getSpectrum()
-        if (values.length) setLiveBars(values)
-        lastUpdate = now
-      }
-      frame = window.requestAnimationFrame(draw)
-    }
-    frame = window.requestAnimationFrame(draw)
-    return () => window.cancelAnimationFrame(frame)
-  }, [getSpectrum, isPlaying])
-  useEffect(() => {
-    let active = true
-    setLyrics(null)
-    setShowLyrics(false)
-    if (track && accessKey) {
-      void fetch(`/api/lyrics/${encodeURIComponent(track.id)}`, { headers: { 'x-resonance-key': accessKey } })
-        .then(response => response.ok ? response.text() : null)
-        .then(value => { if (active) setLyrics(value) })
-        .catch(() => { if (active) setLyrics(null) })
-    }
-    return () => { active = false }
-  }, [track?.id, accessKey])
+  const [queueOpen, setQueueOpen] = useState(false)
   const progress = duration > 0 ? currentTime / duration : 0
-  const timedLyrics = lyrics ? parseLrc(lyrics) : []
-  const activeLyricIndex = timedLyrics.findIndex((line, index) => currentTime >= line.time && (index === timedLyrics.length - 1 || currentTime < timedLyrics[index + 1].time))
-  const bars = Math.round(liveBars.length * progress)
-  const glassBtn = 'grid place-items-center rounded-full border border-white/15 bg-white/10 text-white/85 backdrop-blur transition-colors hover:bg-white/20 hover:text-white'
   const cover = track ? `/api/cover/${encodeURIComponent(track.id)}` : '/cover-fallback.svg'
-
+  const control = 'grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-white/80 transition hover:bg-white/15 hover:text-white active:scale-95 disabled:opacity-30'
   return (
-    <div className="reveal relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <img src={cover} onError={event => { event.currentTarget.src = '/cover-fallback.svg' }} alt="" className="ken-burns absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-[radial-gradient(90%_75%_at_50%_38%,rgba(122,44,204,0.38),transparent_70%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,4,14,0.74)_0%,rgba(7,4,14,0.4)_40%,rgba(5,3,10,0.94)_100%)]" />
-
-      <header className="relative flex shrink-0 items-center justify-between px-4 py-4 md:px-8 md:py-6">
-        <Link to="/" aria-label="Назад" className={`${glassBtn} h-10 w-10`}><ArrowLeft size={18} /></Link>
-        <div className="flex items-center gap-2">
-          <button type="button" title={`Очередь: ${queue.length} треков`} aria-pressed={showQueue} onClick={() => setShowQueue(value => !value)} className={`${glassBtn} h-10 w-10`}><ListMusic size={17} /></button>
-          <button type="button" aria-label="Добавить текущий трек в очередь" onClick={() => track && addToQueue(track)} className={`${glassBtn} h-10 w-10`}><Plus size={17} /></button>
-        </div>
-      </header>
-
-      <div className="scroll-y relative flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-2 text-center md:px-8">
-        <p className="text-[0.62rem] uppercase tracking-[0.22em] text-white/55">Сейчас играет</p>
-        <h1 className="mt-2 max-w-full truncate text-[2rem] font-semibold leading-tight tracking-[-0.02em] text-white md:text-[3rem]">{track?.title || 'Resonance'}</h1>
-        <p className="mt-1 text-[0.9rem] text-white/65 md:text-[1.05rem]">{track ? track.artist + ' · ' + track.album : 'Подключите сервер и выберите музыку в библиотеке'}</p>
-        {error ? <p role="status" className="mt-2 text-xs text-rose-200/90">{error}</p> : null}
-
-        <div className="mt-6 flex h-12 w-full max-w-[34rem] items-end justify-center gap-[3px] md:mt-8 md:h-20" aria-hidden="true">
-          {liveBars.map((height, index) => <span key={index} className={`flex-1 rounded-full transition-colors ${index < bars ? 'accent-grad' : 'bg-white/15'} ${isPlaying ? 'wave-bar' : ''}`} style={{ height: `${height}%`, animationDelay: `${(index % 12) * 70}ms`, animationDuration: `${1 + (index % 5) * 0.16}s` }} />)}
-        </div>
-
-        <div className="mt-5 w-full max-w-[34rem]">
-          <input type="range" min={0} max={Math.max(1, duration)} step={0.1} value={Math.min(currentTime, duration || 0)} aria-label="Позиция воспроизведения" disabled={!track} onChange={event => seek(Number(event.target.value))} className="r-range" style={{ ['--_p' as string]: `${progress * 100}%` } as CSSProperties} />
-          <div className="mt-2 flex justify-between text-[0.7rem] tabular-nums text-white/55"><span>{formatTime(currentTime)}</span><span>{formatTime(duration || track?.duration || 0)}</span></div>
-        </div>
-
-        <div className="mt-4 flex w-full max-w-[32rem] items-center justify-center gap-2.5 md:mt-6 md:gap-3.5">
-          <div className="flex items-center gap-2 md:gap-3.5">
-            <button type="button" onClick={toggleShuffle} aria-pressed={shuffle} aria-label="Перемешать" className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${shuffle ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'}`}><Shuffle size={17} /></button>
-            <button type="button" onClick={() => void previous()} aria-label="Предыдущий трек" className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"><SkipBack size={19} fill="currentColor" /></button>
-            <button type="button" onClick={() => void togglePlay()} disabled={!track} aria-label={isPlaying ? 'Пауза' : 'Слушать'} className={`accent-btn grid h-14 w-14 place-items-center rounded-full transition-transform hover:scale-105 disabled:opacity-40 ${isPlaying ? 'playing-glow' : ''}`}>{isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}</button>
-            <button type="button" onClick={() => void next()} aria-label="Следующий трек" className="grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/12 hover:text-white"><SkipForward size={19} fill="currentColor" /></button>
-            <button type="button" onClick={cycleRepeat} aria-pressed={repeat !== 'off'} aria-label={`Повтор: ${repeat}`} className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${repeat !== 'off' ? 'text-[var(--r-accent)]' : 'text-white/75 hover:text-white'}`}><Repeat size={17} /></button>
-          </div>
-          <button type="button" onClick={() => track && toggleFavorite(track.id)} disabled={!track} aria-pressed={liked} aria-label={liked ? 'Убрать из избранного' : 'В избранное'} className={`grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-white/12 ${liked ? 'text-[var(--r-accent)]' : 'text-white/80 hover:text-white'}`}><Heart size={19} fill={liked ? 'currentColor' : 'none'} /></button>
-        </div>
+    <div className="fade-up mx-auto w-full max-w-[90rem] pb-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link to="/" className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-3 py-2 text-sm t-dim hover:text-[var(--r-text)]"><ArrowLeft size={16}/>Назад</Link>
+        <button type="button" onClick={()=>setQueueOpen(v=>!v)} aria-expanded={queueOpen} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] bg-[var(--r-panel)] px-4 py-2 text-sm"><ListMusic size={17}/>Очередь <span className="rounded-full bg-[var(--r-panel-2)] px-2 py-0.5 text-xs">{queue.length}</span></button>
       </div>
-
-      {showQueue && (
-        <div className="relative mx-auto mb-3 max-h-44 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-3 text-left text-white/85 backdrop-blur">
-          <div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold">Очередь · {queue.length}</span><button type="button" onClick={clearQueue} className="text-xs text-white/60 hover:text-white">Очистить</button></div>
-          {queue.length ? queue.map((item, index) => <div key={item.id} className="flex items-center gap-1 rounded-lg px-1 py-1.5 hover:bg-white/10"><span className="w-5 shrink-0 text-center text-xs text-white/45">{index + 1}</span><button type="button" onClick={() => void playTrack(item)} className="min-w-0 flex-1 truncate text-left text-sm">{item.title} <span className="text-white/50">— {item.artist}</span></button><div className="flex shrink-0 items-center"><button type="button" disabled={index===0} onClick={() => moveQueueItem(index,index-1)} aria-label={`Переместить ${item.title} выше`} title="Выше" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white disabled:opacity-20"><ArrowUp size={13}/></button><button type="button" disabled={index===queue.length-1} onClick={() => moveQueueItem(index,index+1)} aria-label={`Переместить ${item.title} ниже`} title="Ниже" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white disabled:opacity-20"><ArrowDown size={13}/></button><button type="button" onClick={() => removeFromQueue(item.id)} aria-label="Убрать из очереди" className="rounded-full p-1 text-white/55 hover:bg-white/10 hover:text-white"><X size={13} /></button></div></div>) : <p className="text-xs text-white/55">Очередь пуста. Добавляйте треки кнопкой «+» в библиотеке.</p>}
-        </div>
-      )}
-      {showLyrics && (
-        <div className="relative mx-auto mb-3 max-h-40 w-[min(90%,36rem)] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 text-left text-sm leading-relaxed text-white/85 backdrop-blur">
-          {lyrics ? (timedLyrics.length ? <div className="space-y-2">{timedLyrics.map((line, index) => <p key={index} className={`transition-colors ${index === activeLyricIndex ? 'text-white font-semibold' : 'text-white/55'}`}>{line.text}</p>)}</div> : <pre className="whitespace-pre-wrap font-sans">{lyrics}</pre>) : <p className="text-white/60">Для этого трека текст песни не найден. Добавьте рядом с аудиофайлом файл .lrc или .txt.</p>}
-        </div>
-      )}
-      <footer className="relative flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-2 sm:px-6 md:px-8 md:pb-8">
-        <button type="button" onClick={() => setShowLyrics(value => !value)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-[0.82rem] font-medium text-white/90 backdrop-blur transition-colors hover:bg-white/20"><AlignLeft size={15} />Текст песни</button>
-        <div className="flex flex-wrap items-center gap-3">
-          {sleepTimer ? <span className="text-xs text-white/60">Таймер сна включён до {new Date(sleepTimer).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
-          <select value="" onChange={event => setSleepTimer(event.target.value ? Number(event.target.value) : null)} aria-label="Таймер сна" className="rounded-full border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/85 backdrop-blur">
-            <option value="">Таймер сна…</option>
-            <option value="15">Остановить через 15 минут</option>
-            <option value="30">Остановить через 30 минут</option>
-            <option value="45">Остановить через 45 минут</option>
-            <option value="60">Остановить через час</option>
-            <option value="90">Остановить через 90 минут</option>
-            <option value="0">Отключить таймер</option>
-          </select>
-          <label className="inline-flex items-center gap-2 text-white/70">
-            <Volume2 size={15} />
-            <input type="range" min={0} max={100} value={Math.round(volume * 100)} onChange={event => setVolume(Number(event.target.value) / 100)} aria-label="Громкость" className="r-range w-20" style={{ ['--_p' as string]: `${volume * 100}%` } as CSSProperties} />
-          </label>
-          <span className="text-xs text-white/50">В очереди: {queue.length} · {track?.format || '—'}</span>
-        </div>
-      </footer>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="panel relative overflow-hidden p-4 sm:p-6 lg:p-9">
+          <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[var(--r-accent)] opacity-[0.12] blur-[90px]"/>
+          <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center text-center">
+            <p className="t-mute text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Сейчас играет</p>
+            <div className="mt-5 w-full max-w-[min(68vw,22rem)] sm:max-w-[min(55vw,25rem)]">
+              <div className="cover-art aspect-square overflow-hidden rounded-[1.4rem] shadow-2xl shadow-black/40">
+                <img src={cover} alt={track ? `Обложка ${track.title}` : 'Обложка'} onError={event=>{event.currentTarget.src='/cover-fallback.svg'}} className="h-full w-full object-cover"/>
+              </div>
+            </div>
+            <div className="mt-6 w-full min-w-0">
+              <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">{track?.title || 'Resonance'}</h1>
+              <p className="t-dim mt-2 truncate text-sm sm:text-base">{track ? track.artist + (track.album ? ' · ' + track.album : '') : 'Выбери композицию в библиотеке'}</p>
+              {error ? <p role="status" className="mt-3 text-sm text-rose-400">{error}</p> : null}
+            </div>
+            <div className="mt-7 w-full">
+              <input type="range" min={0} max={Math.max(1,duration)} step={0.1} value={Math.min(currentTime,duration||0)} aria-label="Позиция воспроизведения" disabled={!track} onChange={event=>seek(Number(event.target.value))} className="r-range w-full" style={{['--_p' as string]:`${progress*100}%`} as CSSProperties}/>
+              <div className="mt-2 flex justify-between text-xs tabular-nums t-mute"><span>{formatTime(currentTime)}</span><span>{formatTime(duration||track?.duration||0)}</span></div>
+            </div>
+            <div className="mt-6 flex w-full items-center justify-center gap-2 sm:gap-4">
+              <button type="button" onClick={toggleShuffle} aria-pressed={shuffle} title="Перемешать" className={`${control} border-0 bg-transparent ${shuffle?'accent-text':''}`}><Shuffle size={19}/></button>
+              <button type="button" onClick={()=>void previous()} aria-label="Предыдущий трек" className={control}><SkipBack size={21} fill="currentColor"/></button>
+              <button type="button" onClick={()=>void togglePlay()} disabled={!track} aria-label={isPlaying?'Пауза':'Воспроизвести'} className="accent-btn grid h-16 w-16 shrink-0 place-items-center rounded-full shadow-xl shadow-[var(--r-accent)]/20 transition hover:scale-105 disabled:opacity-40">{isPlaying?<Pause size={24} fill="currentColor"/>:<Play size={24} fill="currentColor" className="ml-1"/>}</button>
+              <button type="button" onClick={()=>void next()} aria-label="Следующий трек" className={control}><SkipForward size={21} fill="currentColor"/></button>
+              <button type="button" onClick={cycleRepeat} aria-pressed={repeat!=='off'} title={`Повтор: ${repeat}`} className={`${control} border-0 bg-transparent ${repeat!=='off'?'accent-text':''}`}><Repeat size={19}/>{repeat==='one'?<span className="absolute translate-x-2 -translate-y-2 text-[9px] font-bold">1</span>:null}</button>
+            </div>
+            <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
+              <button type="button" onClick={()=>track&&toggleFavorite(track.id)} disabled={!track} aria-pressed={liked} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] px-4 py-2 text-sm t-dim hover:text-[var(--r-text)] disabled:opacity-40"><Heart size={16} fill={liked?'currentColor':'none'} className={liked?'accent-text':''}/>{liked?'В избранном':'В избранное'}</button>
+              <Link to={track?'/lyrics/'+encodeURIComponent(track.id):'/lyrics'} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] px-4 py-2 text-sm t-dim hover:text-[var(--r-text)]"><AlignLeft size={16}/>Текст песни</Link>
+              <button type="button" onClick={()=>track&&addToQueue(track)} disabled={!track} className="inline-flex items-center gap-2 rounded-full border border-[var(--r-line)] px-4 py-2 text-sm t-dim hover:text-[var(--r-text)] disabled:opacity-40"><Plus size={16}/>В очередь</button>
+            </div>
+            <div className="mt-6 flex w-full max-w-md items-center gap-3">
+              <Volume2 size={17} className="t-mute shrink-0"/>
+              <input type="range" min={0} max={100} value={Math.round(volume*100)} onChange={event=>setVolume(Number(event.target.value)/100)} aria-label="Громкость" className="r-range flex-1" style={{['--_p' as string]:`${volume*100}%`} as CSSProperties}/>
+              <span className="w-9 text-right text-xs tabular-nums t-mute">{Math.round(volume*100)}%</span>
+            </div>
+          </div>
+        </section>
+        <aside className={`${queueOpen?'block':'hidden'} xl:block panel min-w-0 overflow-hidden`}>
+          <div className="flex items-center justify-between border-b border-[var(--r-line)] p-4">
+            <div><h2 className="font-semibold">Следующие треки</h2><p className="t-mute mt-0.5 text-xs">{queue.length} в очереди</p></div>
+            <button type="button" onClick={clearQueue} disabled={!queue.length} className="rounded-full px-3 py-2 text-xs t-dim hover:bg-[var(--r-panel-2)] disabled:opacity-30">Очистить</button>
+          </div>
+          <div className="max-h-[min(65vh,42rem)] overflow-y-auto p-2">
+            {queue.length ? queue.map((item,index)=><div key={item.id} className="group flex min-w-0 items-center gap-2 rounded-xl p-2 transition hover:bg-[var(--r-panel)]">
+              <span className="w-5 shrink-0 text-center text-xs tabular-nums t-mute">{index+1}</span>
+              <img src={`/api/cover/${encodeURIComponent(item.id)}`} alt="" onError={event=>{event.currentTarget.style.visibility='hidden'}} className="h-11 w-11 shrink-0 rounded-lg bg-[var(--r-panel-2)] object-cover"/>
+              <button type="button" onClick={()=>void playTrack(item)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium">{item.title}</span><span className="mt-0.5 block truncate text-xs t-mute">{item.artist}</span></button>
+              <span className="hidden text-xs tabular-nums t-mute sm:block">{formatTime(item.duration)}</span>
+              <div className="flex shrink-0 items-center opacity-100 sm:opacity-60 sm:group-hover:opacity-100">
+                <button type="button" disabled={index===0} onClick={()=>moveQueueItem(index,index-1)} aria-label="Переместить выше" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-20"><ArrowUp size={14}/></button>
+                <button type="button" disabled={index===queue.length-1} onClick={()=>moveQueueItem(index,index+1)} aria-label="Переместить ниже" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-[var(--r-panel-2)] disabled:opacity-20"><ArrowDown size={14}/></button>
+                <button type="button" onClick={()=>removeFromQueue(item.id)} aria-label="Удалить из очереди" className="grid h-8 w-8 place-items-center rounded-full t-mute hover:bg-rose-500/15 hover:text-rose-400"><X size={14}/></button>
+              </div>
+            </div>):<div className="px-4 py-12 text-center"><ListMusic size={28} className="mx-auto t-mute"/><p className="mt-3 text-sm font-medium">Очередь пока пуста</p><p className="mt-1 text-xs t-mute">Добавляй музыку из библиотеки или плейлистов</p><Link to="/library" className="accent-text mt-3 inline-flex text-sm">Открыть библиотеку</Link></div>}
+          </div>
+          <div className="border-t border-[var(--r-line)] p-3 text-xs t-mute">После очереди продолжится воспроизведение библиотеки, если включён повтор всех треков</div>
+        </aside>
+      </div>
     </div>
   )
 }
 
+export function LyricsPage() {
+  const { id = '' } = useParams()
+  const { currentTrack, tracks, currentTime, accessKey, seek } = usePlayer()
+  const track = tracks.find(item=>item.id===id) || currentTrack
+  const [lyrics,setLyrics] = useState<string|null>(null)
+  const [loading,setLoading] = useState(false)
+  const [message,setMessage] = useState('')
+  useEffect(()=>{
+    let active=true
+    setLyrics(null);setMessage('')
+    if(!id||!accessKey){setLoading(false);return}
+    setLoading(true)
+    void fetch(`/api/lyrics/${encodeURIComponent(id)}`,{headers:{'x-resonance-key':accessKey}})
+      .then(response=>response.ok?response.text():Promise.reject(new Error('Текст песни не найден')))
+      .then(value=>{if(active)setLyrics(value)})
+      .catch(cause=>{if(active)setMessage(cause instanceof Error?cause.message:'Не удалось загрузить текст песни')})
+      .finally(()=>{if(active)setLoading(false)})
+    return ()=>{active=false}
+  },[id,accessKey])
+  const lines=lyrics?parseLrc(lyrics):[]
+  const active=lines.findIndex((line,index)=>currentTime>=line.time&&(index===lines.length-1||currentTime<lines[index+1].time))
+  return <div className="fade-up mx-auto max-w-4xl">
+    <div className="mb-5 flex items-center justify-between gap-3"><Link to="/player" className="inline-flex items-center gap-2 text-sm t-dim hover:text-[var(--r-text)]"><ArrowLeft size={16}/>К плееру</Link>{track?<span className="truncate text-xs t-mute">{track.title} · {track.artist}</span>:null}</div>
+    <section className="panel overflow-hidden">
+      <div className="border-b border-[var(--r-line)] p-5 sm:p-7"><p className="t-mute text-xs uppercase tracking-[0.16em]">Текст песни</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">{track?.title||'Композиция не выбрана'}</h1><p className="t-dim mt-1">{track?.artist||'Выбери трек в библиотеке'}</p></div>
+      <div className="max-h-[70vh] overflow-y-auto p-5 text-center sm:p-8">
+        {loading?<p className="t-dim py-12">Загружаем текст…</p>:lyrics?(lines.length?<div className="space-y-5">{lines.map((line,index)=><button type="button" key={index} onClick={()=>seek(line.time)} className={`block w-full text-center text-lg leading-relaxed transition sm:text-xl ${index===active?'accent-text scale-[1.02] font-semibold':'t-dim hover:text-[var(--r-text)]'}`}>{line.text}</button>)}</div>:<pre className="whitespace-pre-wrap font-sans text-left text-sm leading-8 t-dim">{lyrics}</pre>):<div className="py-12"><AlignLeft size={30} className="mx-auto t-mute"/><p className="mt-3 font-medium">Текст песни пока не найден</p><p className="t-dim mt-1 text-sm">{message||'Добавь рядом с аудиофайлом текстовый файл .lrc или .txt.'}</p></div>}
+      </div>
+    </section>
+  </div>
+}
 
 /* ================================================================== */
 /*  Редактор метаданных отдельного трека                               */
