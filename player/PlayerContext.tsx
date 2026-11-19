@@ -73,6 +73,8 @@ type PlayerContextValue = {
   setSleepTimer: (minutes: number | null) => void
   crossfadeSeconds: number
   setCrossfadeSeconds: (seconds: number) => void
+  exportData: () => string
+  importData: (content: string) => void
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -341,6 +343,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const addTrackToPlaylist = useCallback((playlistId: string, trackId: string) => {
     setPlaylists(items => items.map(item => item.id === playlistId ? { ...item, trackIds: [...new Set([...item.trackIds, trackId])] } : item))
   }, [])
+
+  const exportData = useCallback(() => JSON.stringify({
+    app: 'resonance', version: 1, exportedAt: new Date().toISOString(),
+    favorites, history, queue: queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds,
+  }, null, 2), [favorites, history, queueIds, playlists, equalizer, equalizerPreset, crossfadeSeconds])
+
+  const importData = useCallback((content: string) => {
+    const data = JSON.parse(content) as Record<string, unknown>
+    if (data.app !== 'resonance' || data.version !== 1) throw new Error('Файл не является резервной копией Resonance версии 1.')
+    const strings = (value: unknown, limit: number) => Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 256))].slice(0, limit) : []
+    setFavorites(strings(data.favorites, 10000))
+    setHistory(strings(data.history, 500))
+    setQueueIds(strings(data.queue, 5000))
+    if (Array.isArray(data.playlists)) {
+      setPlaylists(data.playlists.filter((item): item is UserPlaylist => Boolean(item && typeof item === 'object' && 'id' in item && typeof item.id === 'string' && 'name' in item && typeof item.name === 'string' && 'trackIds' in item && Array.isArray(item.trackIds)).map(item => ({ id: item.id, name: item.name.slice(0, 120), trackIds: strings(item.trackIds, 5000) })))
+    }
+    if (data.equalizer && typeof data.equalizer === 'object') {
+      const source = data.equalizer as Record<string, unknown>
+      setEqualizer(Object.fromEntries(EQ_BANDS.map(key => [key, typeof source[key] === 'number' ? Math.max(-12, Math.min(12, source[key] as number)) : 0])))
+    }
+    if (typeof data.equalizerPreset === 'string') setEqualizerPreset(data.equalizerPreset.slice(0, 40))
+    if (typeof data.crossfadeSeconds === 'number') setCrossfadeSecondsState(Math.max(0, Math.min(8, data.crossfadeSeconds)))
+  }, [])
+
 
   const activateAudioGraph = useCallback(async () => {
     const primary = audioRef.current
@@ -743,10 +769,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerContextValue>(() => ({
     tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist,
     loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, togglePlay,
-    next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, toggleShuffle: () => setShuffle(value => !value),
+    next, previous, seek, setVolume, playOfflineTrack, crossfadeSeconds, setCrossfadeSeconds, exportData, importData, toggleShuffle: () => setShuffle(value => !value),
     cycleRepeat: () => setRepeat(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
     toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer,
-  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds])
+  }), [tracks, currentTrack, isPlaying, currentTime, duration, volume, shuffle, repeat, queue, favorites, history, equalizer, equalizerPreset, setEqBand, setEqPreset, playlists, createPlaylist, addTrackToPlaylist, loading, error, connected, accessKey, setAccessKey, refreshLibrary, scanLibrary, playTrack, playOfflineTrack, togglePlay, next, previous, seek, setVolume, toggleFavorite, addToQueue, clearQueue, sleepTimer, setSleepTimer, crossfadeSeconds, setCrossfadeSeconds, exportData, importData])
 
   return (
     <PlayerContext.Provider value={value}>
