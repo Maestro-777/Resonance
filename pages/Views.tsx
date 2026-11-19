@@ -267,11 +267,12 @@ export function Albums() {
 
 export function AlbumDetail() {
   const { id } = useParams()
+  const [customCovers, setCustomCovers] = useState<Record<string,string>>(() => readAlbumCovers())
   const { tracks, connected, playTrack } = usePlayer()
   const serverTracks = tracks.filter(track => makeSlug(`${track.album}__${track.albumArtist || track.artist}`) === id)
   const albumTitle = serverTracks[0]?.album || 'Альбом не найден'
   const albumArtist = serverTracks[0]?.albumArtist || serverTracks[0]?.artist || ''
-  const cover = serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : '/cover-fallback.svg'
+  const cover = (id && customCovers[id]) || (serverTracks[0] ? `/api/cover/${encodeURIComponent(serverTracks[0].id)}` : '/cover-fallback.svg')
 
   return (
     <div className="fade-up">
@@ -279,7 +280,7 @@ export function AlbumDetail() {
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end">
         <div className="relative w-full max-w-[13rem] flex-none">
           <div className="accent-grad pulse-glow absolute -inset-5 rounded-[calc(var(--r-radius)*1.8)] opacity-25 blur-2xl" />
-          <Cover src={cover} alt={`Обложка альбома ${albumTitle}`} className="relative aspect-square w-full" />
+          <div className="relative"><Cover src={cover} alt={`Обложка альбома ${albumTitle}`} className="relative aspect-square w-full"/><label title="Изменить обложку альбома" className="accent-btn absolute bottom-2 right-2 grid h-10 w-10 cursor-pointer place-items-center rounded-full"><ImagePlus size={17}/><input type="file" accept="image/*" className="sr-only" onChange={event=>{const file=event.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){window.alert('Изображение должно быть меньше 5 МБ.');event.target.value='';return}const reader=new FileReader();reader.onload=()=>{if(typeof reader.result==='string'&&id){const next={...customCovers,[id]:reader.result};setCustomCovers(next);localStorage.setItem(ALBUM_COVERS_KEY,JSON.stringify(next))}};reader.readAsDataURL(file);event.target.value=''}}/></label></div>
         </div>
         <div className="min-w-0 flex-1">
           <p className="t-mute text-[0.68rem] uppercase tracking-[0.16em]">Альбом</p>
@@ -857,8 +858,10 @@ export function Settings() {
           Открыть панель
         </button>
       </PageHead>
-
-      <section className="panel mb-5 p-4 md:p-5">
+      <nav aria-label="Разделы настроек" className="sticky top-0 z-20 mb-5 flex gap-2 overflow-x-auto rounded-xl border border-[var(--r-line)] bg-[var(--r-app)]/90 p-2 backdrop-blur">
+        {[['#server-settings','Сервер'],['#playback-settings','Переходы'],['#audio-settings','Звук'],['#data-settings','Данные'],['#appearance-settings','Внешний вид']].map(([href,label])=><a key={href} href={href} className="shrink-0 rounded-full border border-[var(--r-line)] px-3 py-2 text-xs font-medium text-[var(--r-text-dim)] hover:border-[var(--r-accent)] hover:text-[var(--r-text)]">{label}</a>)}
+      </nav>
+      <section id="server-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -921,7 +924,7 @@ export function Settings() {
         </section>
       ) : null}
 
-      <section className="panel mb-5 p-4 md:p-5">
+      <section id="playback-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Переход между треками</h2>
@@ -932,7 +935,7 @@ export function Settings() {
         <input type="range" min={0} max={8} step={1} value={crossfadeSeconds} onChange={event => setCrossfadeSeconds(Number(event.target.value))} aria-label="Длительность crossfade" className="r-range mt-4 w-full" style={{ ['--_p' as string]: `${crossfadeSeconds / 8 * 100}%` } as CSSProperties} />
       </section>
 
-      <section className="panel mb-5 p-4 md:p-5">
+      <section id="audio-settings" className="panel mb-5 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Эквалайзер</h2>
@@ -953,7 +956,7 @@ export function Settings() {
         </div>
       </section>
 
-      <section className="panel mb-5 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
+      <section id="data-settings" className="panel mb-5 flex flex-wrap items-center justify-between gap-4 p-4 md:p-5">
         <div>
           <h2 className="text-base font-semibold">Резервная копия коллекции</h2>
           <p className="t-dim mt-1 text-sm">Экспорт и импорт избранного, плейлистов, истории, очереди и настроек звука. Аудиофайлы не включаются.</p>
@@ -983,7 +986,7 @@ export function Settings() {
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="panel p-5 md:p-6">
+        <div id="appearance-settings" className="panel p-5 md:p-6">
           <AppearanceControls />
         </div>
 
